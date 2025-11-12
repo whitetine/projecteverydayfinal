@@ -87,6 +87,7 @@ createApp({
       queueMicrotask(()=> document.getElementById('acc')?.focus());
     });
 
+    const focusAccount = ()=> document.getElementById('acc')?.focus();
     const focusPassword = ()=> document.getElementById('pas')?.focus();
 
     const openForgot = ()=>{
@@ -162,7 +163,7 @@ const loginSubmit = async ()=>{
       showForm, loading, error, showPassword,
       login, hasAccount,
       forgotAccount,
-      focusPassword, openForgot, sendForgot,
+      focusAccount, focusPassword, openForgot, sendForgot,
       loginSubmit
     };
   }

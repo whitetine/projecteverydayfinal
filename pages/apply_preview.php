@@ -214,7 +214,10 @@ try {
       title: '確認操作',
       text: (action==='approve' ? `確定將「${name}」通過？` : `確定將「${name}」退件？`),
       icon: action==='approve' ? 'question' : 'warning',
-      showCancelButton: true
+      showCancelButton: true,
+      confirmButtonText: '確定',
+      cancelButtonText: '取消',
+      reverseButtons: true
     }).then(r=>{
       if(!r.isConfirmed) return;
       fetch('apply_preview.php', {

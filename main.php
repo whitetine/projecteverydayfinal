@@ -9,19 +9,16 @@
       exit;
     }
     
-    $user_name = $_SESSION['user_name'] ?? '未登入';
+    $user_name = $_SESSION['u_name'] ?? '未登入';
     $role_name = $_SESSION['role_name'] ?? '無';
+    $role_ID = $_SESSION['role_ID'] ?? null;
+    $isAdmin = in_array($role_ID, [1, 2]);
     ?>
     <!DOCTYPE html>
     <html lang="zh-Hant">
 
     <head>
       <meta charset="UTF-8">
-      <div id="techbg-host"
-     class="position-fixed top-0 start-0 w-100 h-100"
-     data-mode="app" data-speed="1.15" data-density="1.2"
-     style="z-index:0; pointer-events:none;"></div>
-
       <title>專題日總彙 - 首頁</title>
       <style>
 
@@ -31,13 +28,13 @@
 
     </head>
 
-    <body class="sb-nav-fixed">
+    <body class="sb-nav-fixed <?= $isAdmin ? 'admin-mode' : 'user-mode' ?>">
       <?php include "nav.php"; ?>
 
 
       <div id="layoutSidenav">
-        <div id="layoutSidenav_nav">
-          <nav class="sb-sidenav accordion sb-sidenav-dark" id="sidenavAccordion">
+        <div id="layoutSidenav_nav" class="<?= $isAdmin ? 'admin-sidenav-container' : '' ?>">
+          <nav class="sb-sidenav accordion <?= $isAdmin ? 'sb-sidenav-dark admin-sidenav' : 'sb-sidenav-light' ?>" id="sidenavAccordion">
             <?php include "sidebar.php"; ?>
           </nav>
         </div>
@@ -72,9 +69,6 @@
 <?php include "modules/notify.php"; ?>
 <!-- 再載你的 app.js（最後） -->
 <script src="js/app.js"></script>
-
-
-<script src="js/breeze-ink-bg.js"></script>
 
     </body>
 

@@ -7,12 +7,16 @@ if (!$u_ID) {
   exit;
 }
 
-$sql = "SELECT u.*, r.role_ID, r.role_name, s.status_ID, s.status_name, c.class_ID, c.class_name
+$sql = "SELECT u.*, r.role_ID, r.role_name, s.status_ID, s.status_name, 
+               c.c_ID as class_ID, c.c_name as class_name,
+               e.cohort_ID, ch.cohort_name, e.enroll_grade
         FROM userdata u
-        LEFT JOIN userrolesdata ur ON u.u_ID = ur.u_ID 
+        LEFT JOIN userrolesdata ur ON u.u_ID = ur.ur_u_ID AND ur.user_role_status = 1 
         LEFT JOIN roledata r ON ur.role_ID = r.role_ID
         LEFT JOIN statusdata s ON s.status_ID = u.u_status
-        LEFT JOIN classdata c ON c.class_ID = u.c_ID
+        LEFT JOIN enrollmentdata e ON e.enroll_u_ID = u.u_ID AND e.enroll_status = 1
+        LEFT JOIN classdata c ON c.c_ID = e.class_ID
+        LEFT JOIN cohortdata ch ON ch.cohort_ID = e.cohort_ID
         WHERE u.u_ID = ?";
 $stmt = $conn->prepare($sql);
 $stmt->execute([$u_ID]);
@@ -25,73 +29,151 @@ if (!$user) {
 $roles    = $conn->query("SELECT * FROM roledata")->fetchAll(PDO::FETCH_ASSOC);
 $statuses = $conn->query("SELECT * FROM statusdata")->fetchAll(PDO::FETCH_ASSOC);
 $classes  = $conn->query("SELECT * FROM classdata")->fetchAll(PDO::FETCH_ASSOC);
+$cohorts  = $conn->query("SELECT * FROM cohortdata ORDER BY cohort_ID DESC")->fetchAll(PDO::FETCH_ASSOC);
 ?>
 
-<div class="container-fluid px-4">
-  <h1 class="mt-4">編輯使用者</h1>
+<link rel="stylesheet" href="css/admin_edituser.css?v=<?= time() ?>">
 
-  <div class="card shadow-sm mb-4">
-    <div class="card-body">
-      <form id="editForm" enctype="multipart/form-data">
-        <input type="hidden" name="u_ID" value="<?= htmlspecialchars($user['u_ID']) ?>">
+<div class="edit-user-container">
+  <div class="page-header-edit">
+    <h1 class="page-title-edit">
+      <i class="fa-solid fa-user-pen"></i>編輯使用者
+    </h1>
+  </div>
 
-        <div class="row g-4">
-          <!-- 頭像 -->
-          <div class="col-12 col-md-4 text-center">
+  <div class="edit-card">
+    <form id="editForm" enctype="multipart/form-data">
+      <input type="hidden" name="u_ID" value="<?= htmlspecialchars($user['u_ID']) ?>">
+
+      <div class="row g-4">
+        <!-- 頭像區塊 -->
+        <div class="col-12 col-md-4">
+          <div class="avatar-section">
             <img id="avatarPreview"
-              src="../headshot/<?= htmlspecialchars($user['u_img'] ?: 'default.jpg') ?>"
-              alt="" style="width:160px;height:160px;object-fit:cover;border-radius:50%;border:4px solid rgba(0,0,0,.08);" class="mb-3 shadow-sm">
-            <input type="file" name="avatar" id="avatarInput" accept="image/*" class="form-control">
-            <small class="text-secondary">建議 1:1 圖片，JPG/PNG/WebP</small>
+              src="<?= !empty($user['u_img']) ? 'headshot/' . htmlspecialchars($user['u_img']) : 'https://cdn-icons-png.flaticon.com/512/1144/1144760.png' ?>"
+              alt="用戶頭像" 
+              class="avatar-preview"
+              onerror="this.src='https://cdn-icons-png.flaticon.com/512/1144/1144760.png'"
+              style="width: 180px; height: 180px; object-fit: cover; border-radius: 50%; border: 5px solid #fff; box-shadow: 0 8px 24px rgba(0,0,0,0.15);">
+            
+            <div class="avatar-upload">
+              <input type="file" name="avatar" id="avatarInput" accept="image/*" class="form-control">
+              <small>建議 1:1 圖片，JPG/PNG/WebP，最大 5MB</small>
+            </div>
+            
             <input type="hidden" name="clear_avatar" id="clear_avatar" value="0">
-            <button type="button" class="btn btn-outline-danger" id="btnClearAvatar">清除頭貼</button>
+            <button type="button" class="btn btn-outline-danger btn-clear-avatar" id="btnClearAvatar">
+              <i class="fa-solid fa-trash me-2"></i>清除頭貼
+            </button>
           </div>
+        </div>
 
-
-          <!-- 基本資料 -->
-          <div class="col-12 col-md-8">
+        <!-- 基本資料區塊 -->
+        <div class="col-12 col-md-8">
+          <div class="form-section">
             <div class="row g-3">
               <div class="col-12 col-sm-6">
-                <label class="form-label">學號/ID（唯讀）</label>
-                <input type="text" class="form-control" value="<?= htmlspecialchars($user['u_ID']) ?>" readonly>
+                <label class="form-label-enhanced">
+                  <i class="fa-solid fa-id-card"></i>學號/ID
+                </label>
+                <input type="text" 
+                       class="form-control form-control-enhanced" 
+                       value="<?= htmlspecialchars($user['u_ID']) ?>" 
+                       readonly>
+                <small class="text-muted">此欄位無法修改</small>
               </div>
 
               <div class="col-12 col-sm-6">
-                <label class="form-label">姓名</label>
-                <input type="text" name="name" class="form-control" value="<?= htmlspecialchars($user['u_name']) ?>">
+                <label class="form-label-enhanced">
+                  <i class="fa-solid fa-user"></i>姓名
+                </label>
+                <input type="text" 
+                       name="name" 
+                       class="form-control form-control-enhanced" 
+                       value="<?= htmlspecialchars($user['u_name']) ?>"
+                       required>
               </div>
 
               <div class="col-12 col-sm-6">
-                <label class="form-label">密碼（留空表示不更改）</label>
-                <input type="password" name="password" class="form-control" id="pwd" placeholder="不修改就留空">
+                <label class="form-label-enhanced">
+                  <i class="fa-solid fa-lock"></i>密碼
+                </label>
+                <input type="password" 
+                       name="password" 
+                       class="form-control form-control-enhanced" 
+                       id="pwd" 
+                       placeholder="留空表示不更改密碼"
+                       autocomplete="new-password">
+                <small class="text-muted">留空則不修改密碼</small>
               </div>
 
               <div class="col-12 col-sm-6">
-                <label class="form-label">信箱</label>
-                <input type="email" name="gmail" class="form-control" value="<?= htmlspecialchars($user['u_gmail']) ?>">
+                <label class="form-label-enhanced">
+                  <i class="fa-solid fa-envelope"></i>信箱
+                </label>
+                <input type="email" 
+                       name="gmail" 
+                       class="form-control form-control-enhanced" 
+                       value="<?= htmlspecialchars($user['u_gmail']) ?>"
+                       placeholder="example@email.com">
               </div>
 
               <div class="col-12">
-                <label class="form-label">自我介紹</label>
-                <textarea name="profile" rows="3" class="form-control"><?= htmlspecialchars($user['u_profile']) ?></textarea>
+                <label class="form-label-enhanced">
+                  <i class="fa-solid fa-info-circle"></i>自我介紹
+                </label>
+                <textarea name="profile" 
+                          rows="4" 
+                          class="form-control form-control-enhanced"
+                          placeholder="輸入自我介紹..."><?= htmlspecialchars($user['u_profile']) ?></textarea>
               </div>
 
               <div class="col-12 col-sm-4">
-                <label class="form-label">班級</label>
-                <select name="class_id" class="form-select">
-                  <?php foreach ($classes as $c): ?>
-                    <option value="<?= $c['class_ID'] ?>" <?= $c['class_ID'] == $user['c_ID'] ? 'selected' : ''; ?>>
-                      <?= htmlspecialchars($c['class_name']) ?>
+                <label class="form-label-enhanced">
+                  <i class="fa-solid fa-calendar-alt"></i>學級
+                </label>
+                <select name="cohort_id" class="form-select form-select-enhanced">
+                  <option value="">無學級</option>
+                  <?php foreach ($cohorts as $ch): ?>
+                    <option value="<?= $ch['cohort_ID'] ?>" <?= ($ch['cohort_ID'] == $user['cohort_ID']) ? 'selected' : ''; ?>>
+                      <?= htmlspecialchars($ch['cohort_name']) ?>
                     </option>
                   <?php endforeach; ?>
                 </select>
               </div>
 
               <div class="col-12 col-sm-4">
-                <label class="form-label">角色</label>
-                <select name="role_id" class="form-select">
+                <label class="form-label-enhanced">
+                  <i class="fa-solid fa-graduation-cap"></i>目前班級
+                </label>
+                <div class="d-flex gap-2">
+                  <select name="class_id" class="form-select form-select-enhanced flex-grow-1">
+                    <option value="">無班級</option>
+                    <?php foreach ($classes as $c): ?>
+                      <option value="<?= $c['c_ID'] ?>" <?= ($c['c_ID'] == $user['class_ID']) ? 'selected' : ''; ?>>
+                        <?= htmlspecialchars($c['c_name']) ?>
+                      </option>
+                    <?php endforeach; ?>
+                  </select>
+                  <select name="grade" class="form-select form-select-enhanced" style="min-width: 100px;">
+                    <option value="">年級</option>
+                    <?php for ($g = 1; $g <= 6; $g++): ?>
+                      <option value="<?= $g ?>" <?= ($g == $user['enroll_grade']) ? 'selected' : ''; ?>>
+                        <?= $g ?>年級
+                      </option>
+                    <?php endfor; ?>
+                  </select>
+                </div>
+              </div>
+
+              <div class="col-12 col-sm-4">
+                <label class="form-label-enhanced">
+                  <i class="fa-solid fa-user-tag"></i>角色
+                </label>
+                <select name="role_id" class="form-select form-select-enhanced" required>
+                  <option value="">請選擇角色</option>
                   <?php foreach ($roles as $r): ?>
-                    <option value="<?= $r['role_ID'] ?>" <?= $r['role_ID'] == $user['role_ID'] ? 'selected' : ''; ?>>
+                    <option value="<?= $r['role_ID'] ?>" <?= ($r['role_ID'] == $user['role_ID']) ? 'selected' : ''; ?>>
                       <?= htmlspecialchars($r['role_name']) ?>
                     </option>
                   <?php endforeach; ?>
@@ -99,11 +181,25 @@ $classes  = $conn->query("SELECT * FROM classdata")->fetchAll(PDO::FETCH_ASSOC);
               </div>
 
               <div class="col-12 col-sm-4">
-                <label class="form-label">狀態</label>
-                <select name="status_id" class="form-select">
-                  <?php foreach ($statuses as $s): ?>
-                    <option value="<?= $s['status_ID'] ?>" <?= $s['status_ID'] == $user['u_status'] ? 'selected' : ''; ?>>
-                      <?= htmlspecialchars($s['status_name']) ?>
+                <label class="form-label-enhanced">
+                  <i class="fa-solid fa-toggle-on"></i>狀態
+                </label>
+                <select name="status_id" class="form-select form-select-enhanced" required>
+                  <?php 
+                  // 状态显示映射（仅限账号相关）
+                  $statusMap = [
+                      0 => '休學',
+                      1 => '就讀中',
+                      2 => '錯誤',
+                      3 => '畢業'
+                  ];
+                  foreach ($statuses as $s): 
+                    // 只显示 0-3，不显示 4
+                    if ($s['status_ID'] == 4) continue;
+                    $displayName = isset($statusMap[$s['status_ID']]) ? $statusMap[$s['status_ID']] : $s['status_name'];
+                  ?>
+                    <option value="<?= $s['status_ID'] ?>" <?= ($s['status_ID'] == $user['u_status']) ? 'selected' : ''; ?>>
+                      <?= htmlspecialchars($displayName) ?>
                     </option>
                   <?php endforeach; ?>
                 </select>
@@ -111,66 +207,18 @@ $classes  = $conn->query("SELECT * FROM classdata")->fetchAll(PDO::FETCH_ASSOC);
             </div>
           </div>
         </div>
+      </div>
 
-        <div class="text-end mt-4">
-          <button type="button" class="btn btn-outline-secondary me-2" id="btnCancel">取消</button>
-          <button type="submit" class="btn btn-success" id="btnSave">完成修改</button>
-        </div>
-      </form>
-    </div>
+      <div class="form-actions">
+        <button type="button" class="btn btn-action-edit btn-cancel-edit" id="btnCancel">
+          <i class="fa-solid fa-times me-2"></i>取消
+        </button>
+        <button type="submit" class="btn btn-action-edit btn-save-edit" id="btnSave">
+          <i class="fa-solid fa-check me-2"></i>完成修改
+        </button>
+      </div>
+    </form>
   </div>
 </div>
 
-<script>
-  // 頭像預覽
-  document.getElementById('avatarInput').addEventListener('change', (e) => {
-    const f = e.target.files?.[0];
-    if (f) document.getElementById('avatarPreview').src = URL.createObjectURL(f);
-    // 只要重新選檔，清除旗標歸 0（以上傳為主）
-    document.getElementById('clear_avatar').value = '0';
-  });
-
-  // 取消回清單（保持 SPA）
-  document.getElementById('btnCancel').addEventListener('click', () => {
-    location.hash = 'pages/admin_usermanage.php';
-    $('#content').load('pages/admin_usermanage.php', initPageScript);
-  });
-
-  // 送出（AJAX）
-  document.getElementById('editForm').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const btn = document.getElementById('btnSave');
-    const fd = new FormData(e.target);
-
-    try {
-      btn.disabled = true;
-      if (window.Swal) Swal.showLoading();
-
-      const res = await fetch('pages/admin_updateuser.php', { method: 'POST', body: fd });
-      const json = await res.json(); // 後端必須回 JSON
-
-      if (json.ok) {
-        if (window.Swal) await Swal.fire('已更新', json.msg || '資料已更新', 'success');
-        location.hash = 'pages/admin_usermanage.php';
-        $('#content').load('pages/admin_usermanage.php', initPageScript);
-      } else {
-        if (window.Swal) Swal.fire('更新失敗', json.msg || '請稍後再試', 'error');
-      }
-    } catch (err) {
-      console.error(err);
-      if (window.Swal) Swal.fire('錯誤', '伺服器回應不是 JSON 或連線錯誤', 'error');
-    } finally {
-      btn.disabled = false;
-    }
-  });
-
-  // ✅ 清除頭貼：用正確的 input id 與預設圖路徑
-  document.getElementById('btnClearAvatar').addEventListener('click', function (e) {
-    e.preventDefault();
-    document.getElementById('clear_avatar').value = '1';
-    const fi = document.getElementById('avatarInput');
-    if (fi) fi.value = '';
-    const img = document.getElementById('avatarPreview');
-    if (img) img.src = '../headshot/default.jpg'; // 用和上面預覽一致的相對路徑
-  });
-</script>
+<script src="js/admin_edituser.js?v=<?= time() ?>"></script>

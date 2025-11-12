@@ -1,6 +1,9 @@
 
 <link rel="stylesheet" href="css/bootstrap.min.css">
 <link rel="stylesheet" href="css/style.css?v=<?= time() ?>">
+<!-- 预加载账号管理页面 CSS，避免加载时跑版 -->
+<link rel="preload" href="css/admin_usermanage.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
+<noscript><link rel="stylesheet" href="css/admin_usermanage.css"></noscript>
 <!-- <link rel="stylesheet" href="css/main.css?v=<?= time() ?>"> -->
 <style>
 /* 關掉 Edge/IE 內建的「顯示密碼」與清除鈕 */

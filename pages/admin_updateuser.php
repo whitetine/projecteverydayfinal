@@ -24,6 +24,8 @@ try {
   $u_gmail  = trim($_POST['gmail'] ?? '');
   $u_profile= trim($_POST['profile'] ?? '');
   $c_ID     = isset($_POST['class_id'])  ? intval($_POST['class_id'])  : null;
+  $cohort_ID= isset($_POST['cohort_id'])  ? intval($_POST['cohort_id'])  : null;
+  $grade    = isset($_POST['grade'])      ? intval($_POST['grade'])     : null;
   $role_ID  = isset($_POST['role_id'])   ? intval($_POST['role_id'])   : null;
   $u_status = isset($_POST['status_id']) ? intval($_POST['status_id']) : null;
   $password = trim($_POST['password'] ?? '');
@@ -56,7 +58,7 @@ try {
   if ($u_name !== '')         { $sets[]='u_name = ?';     $params[]=$u_name; }
   $sets[] = 'u_gmail = ?';      $params[] = $u_gmail;
   $sets[] = 'u_profile = ?';    $params[] = $u_profile;
-  if ($c_ID !== null)         { $sets[]='c_ID = ?';       $params[]=$c_ID; }
+  // 注意：userdata 表中沒有 class_ID 欄位，班級通過 enrollmentdata 表管理（見下方處理）
   if ($u_status !== null)     { $sets[]='u_status = ?';   $params[]=$u_status; }
   if ($password !== '')       { $sets[]='u_password = ?'; $params[]=$password; } // 你原本就是明碼，維持不動
   if ($clear)                 { $sets[]='u_img = NULL'; }
@@ -73,16 +75,76 @@ try {
 
   // 角色關聯（單一角色）
   if ($role_ID !== null) {
-    $stmt = $conn->prepare("SELECT COUNT(*) FROM userrolesdata WHERE u_ID = ?");
+    // 使用正確的欄位名稱 ur_u_ID
+    $stmt = $conn->prepare("SELECT COUNT(*) FROM userrolesdata WHERE ur_u_ID = ?");
     $stmt->execute([$u_ID]);
     $exists = $stmt->fetchColumn() > 0;
 
     if ($exists) {
-      $stmt = $conn->prepare("UPDATE userrolesdata SET role_ID = ?, user_role_status = 1 WHERE u_ID = ?");
+      // 更新現有角色關聯
+      $stmt = $conn->prepare("UPDATE userrolesdata SET role_ID = ?, user_role_status = 1 WHERE ur_u_ID = ?");
       $stmt->execute([$role_ID, $u_ID]);
     } else {
-      $stmt = $conn->prepare("INSERT INTO userrolesdata (u_ID, role_ID, user_role_status) VALUES (?,?,1)");
+      // 插入新角色關聯
+      $stmt = $conn->prepare("INSERT INTO userrolesdata (ur_u_ID, role_ID, user_role_status) VALUES (?,?,1)");
       $stmt->execute([$u_ID, $role_ID]);
+    }
+  }
+  
+  // 學籍關聯處理（班級、學級、年級）
+  // 先查找使用者是否有有效的 enrollment 記錄
+  $stmt = $conn->prepare("SELECT enroll_ID, cohort_ID, class_ID, enroll_grade FROM enrollmentdata WHERE enroll_u_ID = ? AND enroll_status = 1 ORDER BY enroll_created_d DESC LIMIT 1");
+  $stmt->execute([$u_ID]);
+  $enroll = $stmt->fetch(PDO::FETCH_ASSOC);
+  
+  // 確定要使用的 cohort_ID（優先使用表單提交的值，否則使用現有值，最後使用預設值）
+  if ($cohort_ID !== null && $cohort_ID > 0) {
+    $final_cohort_ID = $cohort_ID;
+  } elseif ($enroll && $enroll['cohort_ID']) {
+    $final_cohort_ID = $enroll['cohort_ID'];
+  } else {
+    // 獲取當前啟用的 cohort（或最新的 cohort）
+    $cohortStmt = $conn->query("SELECT cohort_ID FROM cohortdata WHERE cohort_status = 1 ORDER BY cohort_ID DESC LIMIT 1");
+    $cohort = $cohortStmt->fetch(PDO::FETCH_ASSOC);
+    $final_cohort_ID = $cohort ? $cohort['cohort_ID'] : 1; // 預設使用第一個 cohort
+  }
+  
+  if ($enroll) {
+    // 更新現有學籍記錄
+    $updateFields = [];
+    $updateParams = [];
+    
+    if ($c_ID !== null) {
+      $updateFields[] = "class_ID = ?";
+      $updateParams[] = $c_ID > 0 ? $c_ID : null;
+    }
+    
+    if ($cohort_ID !== null && $cohort_ID > 0) {
+      $updateFields[] = "cohort_ID = ?";
+      $updateParams[] = $cohort_ID;
+    }
+    
+    if ($grade !== null) {
+      $updateFields[] = "enroll_grade = ?";
+      $updateParams[] = $grade > 0 ? $grade : null;
+    }
+    
+    if (!empty($updateFields)) {
+      $updateParams[] = $enroll['enroll_ID'];
+      $stmt = $conn->prepare("UPDATE enrollmentdata SET " . implode(', ', $updateFields) . " WHERE enroll_ID = ?");
+      $stmt->execute($updateParams);
+    }
+  } else {
+    // 如果沒有 enrollment 記錄，建立新記錄
+    // 至少需要 cohort_ID 才能建立記錄
+    if ($final_cohort_ID) {
+      $stmt = $conn->prepare("INSERT INTO enrollmentdata (enroll_u_ID, cohort_ID, class_ID, enroll_grade, enroll_status, enroll_created_d) VALUES (?,?,?,?,1,NOW())");
+      $stmt->execute([
+        $u_ID, 
+        $final_cohort_ID, 
+        ($c_ID !== null && $c_ID > 0) ? $c_ID : null,
+        ($grade !== null && $grade > 0) ? $grade : null
+      ]);
     }
   }
 

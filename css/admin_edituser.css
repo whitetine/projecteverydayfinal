@@ -1,0 +1,228 @@
+/* 编辑用户页面样式 */
+.edit-user-container {
+    padding: 2rem;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+.page-header-edit {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 2rem;
+    padding-bottom: 1rem;
+    border-bottom: 2px solid #e9ecef;
+}
+
+.page-title-edit {
+    font-size: 2rem;
+    font-weight: 600;
+    color: #1a1a2e;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.page-title-edit i {
+    color: #ffc107;
+}
+
+.edit-card {
+    background: #fff;
+    border-radius: 16px;
+    padding: 2rem;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+    border: 1px solid #e9ecef;
+}
+
+.avatar-section {
+    text-align: center;
+    padding: 1.5rem;
+    background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+    border-radius: 12px;
+    margin-bottom: 1.5rem;
+}
+
+.avatar-preview {
+    width: 180px;
+    height: 180px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 5px solid #fff;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+    margin-bottom: 1.5rem;
+    transition: transform 0.3s ease;
+}
+
+.avatar-preview:hover {
+    transform: scale(1.05);
+}
+
+.avatar-upload {
+    margin-bottom: 1rem;
+}
+
+.avatar-upload input[type="file"] {
+    padding: 0.75rem;
+    border-radius: 8px;
+    border: 2px dashed #dee2e6;
+    background: #fff;
+    transition: all 0.3s ease;
+}
+
+.avatar-upload input[type="file"]:hover {
+    border-color: #ffc107;
+    background: #fffbf0;
+}
+
+.avatar-upload small {
+    display: block;
+    margin-top: 0.5rem;
+    color: #6c757d;
+    font-size: 0.85rem;
+}
+
+.btn-clear-avatar {
+    margin-top: 0.75rem;
+    border-radius: 8px;
+    padding: 0.5rem 1.5rem;
+    transition: all 0.3s ease;
+}
+
+.btn-clear-avatar:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(220, 53, 69, 0.3);
+}
+
+.form-section {
+    padding: 1.5rem;
+}
+
+.form-group-enhanced {
+    margin-bottom: 1.5rem;
+}
+
+.form-label-enhanced {
+    font-weight: 600;
+    color: #1a1a2e;
+    margin-bottom: 0.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.form-label-enhanced i {
+    color: #ffc107;
+    font-size: 0.9rem;
+}
+
+.form-control-enhanced,
+.form-select-enhanced {
+    border-radius: 8px;
+    border: 2px solid #e9ecef;
+    padding: 0.75rem 1rem;
+    transition: all 0.3s ease;
+    font-size: 0.95rem;
+}
+
+.form-control-enhanced:focus,
+.form-select-enhanced:focus {
+    border-color: #ffc107;
+    box-shadow: 0 0 0 0.2rem rgba(255, 193, 7, 0.25);
+    outline: none;
+}
+
+.form-control-enhanced[readonly] {
+    background-color: #f8f9fa;
+    cursor: not-allowed;
+}
+
+.form-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 1rem;
+    margin-top: 2rem;
+    padding-top: 2rem;
+    border-top: 2px solid #e9ecef;
+}
+
+.btn-action-edit {
+    padding: 0.75rem 2rem;
+    border-radius: 8px;
+    font-weight: 600;
+    transition: all 0.3s ease;
+    border: none;
+    min-width: 120px;
+}
+
+.btn-cancel-edit {
+    background: linear-gradient(135deg, #6c757d 0%, #495057 100%);
+    color: white;
+}
+
+.btn-cancel-edit:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(108, 117, 125, 0.4);
+    color: white;
+}
+
+.btn-save-edit {
+    background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+    color: white;
+}
+
+.btn-save-edit:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(40, 167, 69, 0.4);
+    color: white;
+}
+
+.btn-save-edit:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+    .edit-user-container {
+        padding: 1rem;
+    }
+    
+    .avatar-section {
+        margin-bottom: 2rem;
+    }
+    
+    .avatar-preview {
+        width: 140px;
+        height: 140px;
+    }
+    
+    .form-actions {
+        flex-direction: column;
+    }
+    
+    .btn-action-edit {
+        width: 100%;
+    }
+}
+
+/* 美化输入框图标 */
+.input-group-icon {
+    position: relative;
+}
+
+.input-group-icon i {
+    position: absolute;
+    left: 1rem;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #6c757d;
+    z-index: 10;
+}
+
+.input-group-icon input {
+    padding-left: 2.5rem;
+}
+

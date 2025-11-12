@@ -40,13 +40,15 @@ switch ($do) {
     $_SESSION['u_name'] = $user['u_name'];
     $_SESSION['u_img']  = $user['u_img'] ?? null;
 
-    // 查角色
-    $roles = fetchAll(query("
+    // 查角色（使用参数化查询）
+    $stmt = $conn->prepare("
         SELECT r.role_ID, r.role_name
         FROM userrolesdata ur
         JOIN roledata r ON ur.role_ID = r.role_ID
-        WHERE ur.ur_u_ID = '{$user["u_ID"]}' AND ur.user_role_status = 1
-    "));
+        WHERE ur.ur_u_ID = ? AND ur.user_role_status = 1
+    ");
+    $stmt->execute([$user['u_ID']]);
+    $roles = $stmt->fetchAll(PDO::FETCH_ASSOC);
     $count = count($roles);
 
     if ($count == 1) {
@@ -63,12 +65,19 @@ switch ($do) {
 
     // 角色清單（啟用）
     case 'role_choose':
-        $u_ID = $_SESSION['u_ID'];
-        echo json_encode(fetchAll(query("
-            SELECT b.role_ID,b.role_name
-            FROM userrolesdata a JOIN roledata b ON a.role_ID = b.role_ID
-            WHERE a.u_ID='{$u_ID}' AND a.user_role_status=1;
-        ")));
+        $u_ID = $_SESSION['u_ID'] ?? '';
+        if (!$u_ID) {
+            echo json_encode([]);
+            break;
+        }
+        $stmt = $conn->prepare("
+            SELECT b.role_ID, b.role_name
+            FROM userrolesdata a 
+            JOIN roledata b ON a.role_ID = b.role_ID
+            WHERE a.ur_u_ID = ? AND a.user_role_status = 1
+        ");
+        $stmt->execute([$u_ID]);
+        echo json_encode($stmt->fetchAll(PDO::FETCH_ASSOC), JSON_UNESCAPED_UNICODE);
         break;
 
     // 設定角色到 session（相容舊前端：ID/name；也接受 role_ID/role_name）

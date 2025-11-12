@@ -227,7 +227,7 @@ mounted() {
   // ========================
   // 通用子頁載入器（hash 控制）
   // ========================
-  function loadSubpage(path) {
+  window.loadSubpage = function loadSubpage(path) {
     if (!path || !path.startsWith(BASE_PREFIX)) return;
 
     // 卸載上一個 Vue App（若有）
@@ -236,7 +236,8 @@ mounted() {
       currentApp = null;
     }
 
-    $(CONTENT_SEL).html('<div class="p-5 text-center text-secondary">載入中…</div>');
+    // 显示加载提示，保持容器高度避免跳动
+    $(CONTENT_SEL).html('<div class="p-5 text-center text-secondary" style="min-height: 400px; display: flex; align-items: center; justify-content: center;">載入中…</div>');
 
     $(CONTENT_SEL).load(path, function (response, status, xhr) {
       if (status === 'error') {
@@ -244,8 +245,42 @@ mounted() {
         return;
       }
 
+      // 确保 CSS 已加载后再显示内容（防止跑版）
+      const userManagementContent = $(CONTENT_SEL).find('#userManagementContent');
+      if (userManagementContent.length > 0) {
+        // 等待 CSS 和布局稳定，使用双重 requestAnimationFrame 确保渲染完成
+        requestAnimationFrame(function() {
+          requestAnimationFrame(function() {
+            // 再次等待，确保所有样式都已应用
+            setTimeout(function() {
+              userManagementContent.css('visibility', 'visible');
+            }, 50);
+          });
+        });
+      }
+
       // 子頁 DOM 進來後，跑共用初始化
-      initPageScript();
+      // 延迟初始化，确保布局稳定后再执行脚本
+      setTimeout(function() {
+        initPageScript();
+        
+        // 重新初始化 Bootstrap 下拉菜单（只初始化侧边栏外的，避免重复）
+        // 注意：不要重复初始化已经在 DOMContentLoaded 中初始化的菜单
+        if (window.bootstrap) {
+          // 只初始化不在 .user-menu 中的下拉菜单（避免重复）
+          $('.dropdown-toggle').not('.user-menu .dropdown-toggle').each(function() {
+            // 先检查是否已经初始化
+            const existing = bootstrap.Dropdown.getInstance(this);
+            if (!existing) {
+              bootstrap.Dropdown.getOrCreateInstance(this, {
+                popperConfig: {
+                  strategy: 'fixed'
+                }
+              });
+            }
+          });
+        }
+      }, 100);
 
       // 依檔名呼叫對應的 render 函式（若有；建議子頁都用 <div id="app">）
       const fnName = filenameToRenderFn(path);
@@ -260,7 +295,7 @@ mounted() {
         if ($(this).attr('href') === path) $(this).addClass('active');
       });
     });
-  }
+  };
 
   // ========================
   // 共用初始化（事件委派、SweetAlert 等）
@@ -313,29 +348,53 @@ mounted() {
     const btn = document.getElementById("sidebarToggle");
     if (btn) btn.addEventListener("click", (e) => { e.preventDefault(); document.body.classList.toggle("sb-sidenav-toggled"); });
 
-    // 對「使用者卡」的 dropdown 啟用 fixed 策略（避免父層 transform 影響疊層）
-    document.querySelectorAll('.user-menu .dropdown-toggle').forEach(btn => {
-      if (!window.bootstrap || !bootstrap.Dropdown) return;
-      bootstrap.Dropdown.getOrCreateInstance(btn, {
-        autoClose: 'outside',
-        popperConfig: (defaultConfig) => ({ ...defaultConfig, strategy: 'fixed' })
-      });
-    });
+    // 初始化导航栏中的用户菜单下拉（使用 Bootstrap 的标准方式）
+    if (window.bootstrap && bootstrap.Dropdown) {
+      const userMenuBtn = document.getElementById('userMenuBtn');
+      if (userMenuBtn) {
+        // 使用 Bootstrap 的标准初始化，确保下拉菜单正常工作
+        bootstrap.Dropdown.getOrCreateInstance(userMenuBtn, {
+          popperConfig: {
+            strategy: 'fixed'
+          }
+        });
+      }
+    }
 
     // 「說明」子選單：滑過展開 / 移出關閉
-    document.querySelectorAll('.dropdown-submenu').forEach(el => {
-      el.addEventListener('mouseenter', () => {
-        const toggle = el.querySelector('[data-bs-toggle="dropdown"]');
-        if (!toggle || !window.bootstrap || !bootstrap.Dropdown) return;
-        const dd = bootstrap.Dropdown.getOrCreateInstance(toggle, { autoClose: false, popperConfig: { strategy: 'fixed' } });
-        dd.show();
+    // 使用事件委托，避免重复绑定
+    let submenuHandlersBound = false;
+    function initSubmenuHandlers() {
+      if (submenuHandlersBound) return;
+      
+      document.querySelectorAll('.dropdown-submenu').forEach(el => {
+        // 移除旧的事件监听器（如果存在）
+        const newEl = el.cloneNode(true);
+        el.parentNode.replaceChild(newEl, el);
+        
+        newEl.addEventListener('mouseenter', function(e) {
+          e.stopPropagation();
+          const toggle = this.querySelector('[data-bs-toggle="dropdown"]');
+          if (!toggle || !window.bootstrap || !bootstrap.Dropdown) return;
+          const dd = bootstrap.Dropdown.getOrCreateInstance(toggle, { 
+            autoClose: false, 
+            popperConfig: { strategy: 'fixed' } 
+          });
+          dd.show();
+        });
+        
+        newEl.addEventListener('mouseleave', function(e) {
+          e.stopPropagation();
+          const toggle = this.querySelector('[data-bs-toggle="dropdown"]');
+          const dd = (toggle && window.bootstrap) ? bootstrap.Dropdown.getInstance(toggle) : null;
+          if (dd) dd.hide();
+        });
       });
-      el.addEventListener('mouseleave', () => {
-        const toggle = el.querySelector('[data-bs-toggle="dropdown"]');
-        const dd = (toggle && window.bootstrap) ? bootstrap.Dropdown.getInstance(toggle) : null;
-        if (dd) dd.hide();
-      });
-    });
+      
+      submenuHandlersBound = true;
+    }
+    
+    initSubmenuHandlers();
 
     // 首次進站：有 hash 就載入；沒有就保持空白或自行指定預設頁
     const initial = location.hash.slice(1);

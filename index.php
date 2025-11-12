@@ -7,7 +7,7 @@ $_SESSION = [];
 <head name="app-base" content="/myprojecteverydaysforlasttest/">
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>專題日總彙</title>
+  <title>專題總彙</title>
 
   <?php include "head.php"; ?> <!-- 確保這裡有 Vue 3 (global)、Bootstrap 5、Font Awesome（可選）、SweetAlert2（可選） -->
   <!-- <link rel="stylesheet" href="css/main.css?v=<?= time() ?>" /> -->
