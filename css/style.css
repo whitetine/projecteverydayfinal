@@ -85,6 +85,7 @@ body.sb-nav-fixed { padding-top: 0 !important; }
 #layoutSidenav {
   display: flex;
   min-height: calc(100vh - 56px); /* 扣掉上方 navbar */
+  margin-top: 56px; /* 從 navbar 下方開始 */
 }
 
 /* 側邊欄 */
@@ -94,8 +95,11 @@ body.sb-nav-fixed { padding-top: 0 !important; }
   background-color: #ffffff;
   transition: width 0.3s ease;
   overflow: hidden;
-  position: relative;
-  z-index: 1030 !important; /* 低於 navbar，確保不會遮蓋導航欄 */
+  position: fixed;
+  top: 56px; /* 從 navbar 下方開始 */
+  left: 0;
+  height: calc(100vh - 56px); /* 高度扣掉 navbar */
+  z-index: 1040 !important; /* 高於內容，但低於 navbar */
 }
 
 /* 主內容（你在 main.php 的 <main id="content">） */
@@ -105,12 +109,17 @@ body.sb-nav-fixed { padding-top: 0 !important; }
   /* background-color: #f8f9fa; */
   padding: 1rem;               /* 統一左右留白，讓內容更靠左 */
   transition: padding 0.2s ease;
+  margin-left: var(--sidebar-w); /* 為 sidebar 留出空間 */
 }
 
 /* ==== 收合狀態 ==== */
 body.sb-sidenav-toggled #layoutSidenav_nav {
   flex-basis: var(--sidebar-collapsed);
   width: var(--sidebar-collapsed);
+}
+
+body.sb-sidenav-toggled #content {
+  margin-left: var(--sidebar-collapsed);
 }
 
 /* 收合時隱藏文字，只留下 icon 置中 */
@@ -195,21 +204,20 @@ body.sb-sidenav-toggled .nav-link { justify-content: center; }
 }
 
 
-#layoutSidenav_nav { 
-  position: relative; 
-  z-index: 1050 !important; 
-}
+/* 移除舊的定位規則，使用新的 fixed 定位 */
 #layoutSidenav_nav, #sidenavAccordion, .sb-sidenav, .sb-sidenav .sb-sidenav-menu { 
   overflow: visible !important; 
 }
 
 /* 確保 sidebar 在所有情況下都可見，但低於 navbar */
 #layoutSidenav_nav {
-  z-index: 1030 !important;
+  z-index: 1040 !important;
 }
 
 .sb-sidenav {
-  z-index: 1030 !important;
+  z-index: 1040 !important;
+  height: 100%;
+  overflow-y: auto;
 }
 
 /* 导航栏中的用户菜单下拉样式 */
@@ -264,16 +272,25 @@ body.sb-sidenav-toggled .nav-link { justify-content: center; }
 
 /* 展開：允許溢出、維持層級（低於 navbar） */
 body:not(.sb-sidenav-toggled) #layoutSidenav_nav { 
-  position: relative; 
-  z-index: 1030 !important; 
+  position: fixed;
+  top: 56px;
+  left: 0;
+  height: calc(100vh - 56px);
+  z-index: 1040 !important; 
 }
 body:not(.sb-sidenav-toggled) #layoutSidenav_nav,
 body:not(.sb-sidenav-toggled) #sidenavAccordion,
 body:not(.sb-sidenav-toggled) .sb-sidenav,
 body:not(.sb-sidenav-toggled) .sb-sidenav .sb-sidenav-menu { overflow: visible !important; }
 
-/* 收合：關閉溢出、降低層級 */
-body.sb-sidenav-toggled #layoutSidenav_nav { z-index: 0; }
+/* 收合：關閉溢出、維持層級 */
+body.sb-sidenav-toggled #layoutSidenav_nav { 
+  position: fixed;
+  top: 56px;
+  left: 0;
+  height: calc(100vh - 56px);
+  z-index: 1040 !important; 
+}
 body.sb-sidenav-toggled #layoutSidenav_nav,
 body.sb-sidenav-toggled #sidenavAccordion,
 body.sb-sidenav-toggled .sb-sidenav,
@@ -426,8 +443,11 @@ body.sb-sidenav-toggled .sb-sidenav .sb-sidenav-menu { overflow: hidden !importa
 
 /* 后台管理侧边栏容器 */
 .admin-sidenav-container {
-  position: relative;
-  z-index: 1030 !important;
+  position: fixed;
+  top: 56px;
+  left: 0;
+  height: calc(100vh - 56px);
+  z-index: 1040 !important;
 }
 
 .admin-sidenav-container,
@@ -435,7 +455,8 @@ body.sb-sidenav-toggled .sb-sidenav .sb-sidenav-menu { overflow: hidden !importa
 .admin-sidenav {
   background: linear-gradient(180deg, #1a1a2e 0%, #16213e 100%) !important;
   position: relative;
-  z-index: 1030 !important;
+  z-index: 1040 !important;
+  height: 100%;
 }
 
 /* 后台管理主内容区域 */

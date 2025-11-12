@@ -9,14 +9,12 @@ function initPageScript() {
 
     // 全選
     $('#selectAllBtn').off('click').on('click', function() {
-        $('.user-checkbox').prop('checked', true);
-        updateSelectedCount();
+        $('.user-checkbox').prop('checked', true).trigger('change');
     });
 
     // 取消全選
     $('#deselectAllBtn').off('click').on('click', function() {
-        $('.user-checkbox').prop('checked', false);
-        updateSelectedCount();
+        $('.user-checkbox').prop('checked', false).trigger('change');
     });
 
     // 批量編輯
@@ -49,6 +47,13 @@ function initPageScript() {
 
     // 監聽複選框變化
     $(document).off('change', '.user-checkbox').on('change', '.user-checkbox', function() {
+        // 更新選中狀態的視覺反饋
+        const card = $(this).closest('.user-card');
+        if ($(this).is(':checked')) {
+            card.addClass('user-card-selected');
+        } else {
+            card.removeClass('user-card-selected');
+        }
         updateSelectedCount();
     });
 
@@ -65,6 +70,11 @@ function initPageScript() {
             checkbox.prop('checked', !checkbox.prop('checked'));
             checkbox.trigger('change');
         }
+    });
+
+    // 初始化選中狀態的視覺反饋
+    $('.user-checkbox:checked').each(function() {
+        $(this).closest('.user-card').addClass('user-card-selected');
     });
 
     // 初始化選中數量

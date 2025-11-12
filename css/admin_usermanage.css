@@ -100,6 +100,24 @@
 .user-card:hover {
     transform: translateY(-6px);
     box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+    border-color: #ffc107;
+}
+
+.user-card:active {
+    transform: translateY(-4px);
+}
+
+/* 選中狀態的視覺反饋 */
+.user-card.user-card-selected,
+.user-card:has(.user-checkbox:checked) {
+    border-color: #ffc107;
+    border-width: 2px;
+    box-shadow: 0 4px 16px rgba(255, 193, 7, 0.3);
+}
+
+.user-card.user-card-selected:hover,
+.user-card:has(.user-checkbox:checked):hover {
+    box-shadow: 0 8px 24px rgba(255, 193, 7, 0.4);
 }
 
 /* 學級徽章顯示在最上方 */
