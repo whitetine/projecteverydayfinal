@@ -1,118 +1,168 @@
-// js/pages/work-form.js
-document.addEventListener('DOMContentLoaded', () => {
-  const root      = document.querySelector('#work-form-page');
-  if (!root) return;
+let API_URL = 'work_form_data.php';
 
-  const $ = (sel) => root.querySelector(sel);
-  const form      = $('#work-main-form');
-  const tfId      = $('#wf-work_id');
-  const tfTitle   = $('#wf-title');
-  const tfContent = $('#wf-content');
-  const tfFile    = $('#wf-file');
+function resolveApiUrl() {
+  const formEl = document.getElementById('work-main-form');
+  if (!formEl) return API_URL;
+  const base = (formEl.dataset.apiBase || '').trim();
+  if (!base) return 'work_form_data.php';
+  return base.endsWith('/')
+    ? `${base}work_form_data.php`
+    : `${base}/work_form_data.php`;
+}
 
-  const btnDraft  = $('#wf-btn-draft');
-  const btnSubmit = $('#wf-btn-submit');
-  const btnClear  = $('#btn-clear-file');
-  const btnRemove = $('#btn-remove-file');
-  const badgeRO   = $('#wf-readonly-badge');
+async function loadData() {
+  try {
+    const res = await fetch(`${API_URL}?action=get`, {
+      credentials: 'same-origin'
+    });
+    if (!res.ok) throw new Error(`伺服器回應異常（${res.status}）`);
+    const data = await res.json();
 
-  const curWrap   = $('#wf-current-file');
-  const curLink   = $('#wf-file-link');
+    if (data.success) {
+      document.getElementById('work_id').value = data.work.work_ID || '';
+      document.getElementById('work_title').value = data.work.work_title || '';
+      document.getElementById('work_content').value = data.work.work_content || '';
 
-  // 讀資料
-  fetch('#pages/work_form_data.php')
-    .then(r => r.json())
-    .then(j => {
-      if (!j.ok) {
-        alert(j.msg || '讀取失敗');
-        return;
+      if (data.readOnly) {
+        document.getElementById('work_title').setAttribute('readonly', true);
+        document.getElementById('work_content').setAttribute('readonly', true);
+        document.getElementById('action-buttons').classList.add('d-none');
+        document.getElementById('doneBadge').classList.remove('d-none');
       }
-      if (j.msg) {
-        // 你的 head.php 若已載入 SweetAlert2，就會有 Swal 可用
-        if (window.Swal) Swal.fire({icon:'info', title:'提示', text:j.msg, confirmButtonText:'知道了'});
-      }
-      const t = j.today;
-      if (t) {
-        tfId.value      = t.work_ID || '';
-        tfTitle.value   = t.work_title || '';
-        tfContent.value = t.work_content || '';
-        if (t.work_url) {
-          curWrap.classList.remove('d-none');
-          curLink.href = t.work_url;
-          curLink.textContent = t.work_url.split('/').pop();
-        }
-      }
-      applyReadonly(j.readOnly === true);
-    })
-    .catch(() => alert('讀取失敗，請稍後再試'));
-
-  function applyReadonly(ro){
-    tfTitle.readOnly   = ro;
-    tfContent.readOnly = ro;
-    tfFile.disabled    = ro;
-    btnClear.disabled  = ro;
-
-    if (ro) {
-      btnDraft.classList.add('d-none');
-      btnSubmit.classList.add('d-none');
-      badgeRO.classList.remove('d-none');
     } else {
-      btnDraft.classList.remove('d-none');
-      btnSubmit.classList.remove('d-none');
-      badgeRO.classList.add('d-none');
+      Swal.fire('錯誤', data.msg || '資料載入失敗', 'error');
     }
+  } catch (err) {
+    console.error(err);
+    Swal.fire('錯誤', err.message || '資料載入失敗', 'error');
   }
+}
 
-  // 清空尚未上傳的檔案
-  const updateClearState = () => {
-    const hasFile = tfFile.files && tfFile.files.length > 0;
-    btnClear.disabled = tfFile.disabled || !hasFile;
-  };
-  tfFile.addEventListener('change', updateClearState);
-  btnClear.addEventListener('click', () => {
-    try { tfFile.value=''; tfFile.dispatchEvent(new Event('change')); } catch(e){}
-    updateClearState();
-    if (window.Swal) Swal.fire({icon:'success', title:'已清空選擇', timer:900, showConfirmButton:false});
+async function saveData(action) {
+  try {
+    const formEl = document.getElementById('work-main-form');
+    if (!formEl) return;
+    
+    // 驗證表單
+    if (!formEl.checkValidity()) {
+      formEl.reportValidity();
+      return;
+    }
+    
+    const formData = new FormData(formEl);
+    formData.append('action', action);
+
+    const res = await fetch(API_URL, {
+      method: 'POST',
+      credentials: 'same-origin',
+      body: formData
+    });
+    if (!res.ok) throw new Error(`伺服器回應異常（${res.status}）`);
+
+    const data = await res.json();
+
+    Swal.fire({
+      icon: data.success ? 'success' : 'error',
+      title: data.success ? '成功' : '失敗',
+      text: data.msg,
+    }).then(() => {
+      if (data.reload) {
+        loadData();
+      }
+    });
+  } catch (err) {
+    console.error(err);
+    Swal.fire('錯誤', err.message || '資料送出失敗', 'error');
+  }
+}
+
+function initWorkForm() {
+  // 防止重複初始化
+  if (window._workFormInitialized) {
+    console.log('work-form already initialized, skipping...');
+    return;
+  }
+  window._workFormInitialized = true;
+  
+  API_URL = resolveApiUrl();
+  loadData();
+  
+  const formEl = document.getElementById('work-main-form');
+  if (!formEl) return;
+  
+  // 防止表單提交（使用 AJAX 而非傳統提交）
+  formEl.addEventListener('submit', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    return false;
   });
-  updateClearState();
-
-  // >50MB 擋下
-  form.addEventListener('submit', (e) => {
-    const f = tfFile && tfFile.files && tfFile.files[0];
-    if (f && f.size > 50 * 1024 * 1024) {
+  
+  // 綁定按鈕事件，明確阻止預設行為
+  const saveBtn = document.getElementById('saveBtn');
+  const submitBtn = document.getElementById('submitBtn');
+  
+  if (saveBtn) {
+    saveBtn.addEventListener('click', (e) => {
       e.preventDefault();
-      if (window.Swal) Swal.fire({icon:'warning', title:'檔案過大', text:'檔案超過 50MB，請清空選擇或把雲端連結貼在內容區。'});
-    }
-  });
+      e.stopPropagation();
+      saveData('save');
+      return false;
+    });
+  }
+  
+  if (submitBtn) {
+    submitBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      saveData('submit');
+      return false;
+    });
+  }
+}
 
-  // 移除已上傳檔案（走既有 work_save.php）
-  btnRemove && btnRemove.addEventListener('click', () => {
-    if (!tfId.value) return;
-    const go = () => {
-      const fm = document.createElement('form');
-      fm.method = 'post';
-      fm.action = '#pages/work_save.php';
-      fm.classList.add('d-none');
-      fm.innerHTML = `
-        <input type="hidden" name="action" value="remove_file">
-        <input type="hidden" name="work_id" value="${tfId.value}">
-      `;
-      document.body.appendChild(fm);
-      fm.submit();
-    };
-    if (window.Swal) {
-      Swal.fire({
-        icon:'question',
-        title:'確定要移除目前已上傳的檔案嗎？',
-        showCancelButton:true,
-        cancelButtonText:'取消',
-        confirmButtonText:'移除',
-        confirmButtonColor:'#dc3545',
-        reverseButtons:true,
-        focusCancel:true
-      }).then((r)=>{ if(r.isConfirmed) go(); });
-    } else {
-      if (confirm('確定移除已上傳檔案？')) go();
-    }
-  });
+// 暴露到全域，讓 app.js 可以調用
+window.initWorkForm = initWorkForm;
+
+// 根據 DOM 狀態決定如何初始化
+function tryInitWorkForm() {
+  const formEl = document.getElementById('work-main-form');
+  if (formEl) {
+    initWorkForm();
+    return true;
+  }
+  return false;
+}
+
+// 立即嘗試初始化（如果元素已存在）
+if (!tryInitWorkForm()) {
+  // 如果元素不存在，等待 DOMContentLoaded
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+      tryInitWorkForm();
+    }, { once: true });
+  } else {
+    // DOM 已就緒但元素可能還沒載入，延遲再試
+    setTimeout(() => {
+      if (!tryInitWorkForm()) {
+        // 如果還是沒有，監聽自定義事件（動態載入完成時觸發）
+        $(document).on('pageLoaded', function(e, path) {
+          if (path && path.includes('work_form')) {
+            setTimeout(tryInitWorkForm, 200);
+          }
+        });
+      }
+    }, 100);
+  }
+}
+
+// 監聽自定義事件（當頁面動態載入完成時）
+$(document).on('pageLoaded scriptExecuted', function(e, path) {
+  if (path && path.includes('work_form')) {
+    setTimeout(() => {
+      if (!tryInitWorkForm()) {
+        // 如果第一次失敗，再試一次
+        setTimeout(tryInitWorkForm, 300);
+      }
+    }, 200);
+  }
 });
