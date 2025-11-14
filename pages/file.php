@@ -23,7 +23,7 @@ $groups = $conn->query("SELECT * FROM groupdata WHERE group_status = 1 ORDER BY 
     <div class="page-header mb-4">
         <h1 class="mb-0 d-flex align-items-center">
             <i class="fa-solid fa-file-upload me-3" style="color: #ffc107;"></i>
-            範例檔案管理
+            範例檔案管
         </h1>
         <div class="page-header-actions mt-3">
             <a href="#pages/apply_preview.php" 
