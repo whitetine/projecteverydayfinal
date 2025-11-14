@@ -23,7 +23,7 @@ $groups = $conn->query("SELECT * FROM groupdata WHERE group_status = 1 ORDER BY 
     <div class="page-header mb-4">
         <h1 class="mb-0 d-flex align-items-center">
             <i class="fa-solid fa-file-upload me-3" style="color: #ffc107;"></i>
-            範例檔案管
+            範例檔案管理
         </h1>
         <div class="page-header-actions mt-3">
             <a href="#pages/apply_preview.php" 
@@ -56,7 +56,7 @@ $groups = $conn->query("SELECT * FROM groupdata WHERE group_status = 1 ORDER BY 
                         <input type="text" 
                                class="form-control" 
                                v-model="form.file_des" 
-                               placeholder="文件說明（選填）">
+                               placeholder="文件說明（選）">
                     </div>
 
                     <!-- 檔案上傳 -->
