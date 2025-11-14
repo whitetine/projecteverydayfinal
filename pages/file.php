@@ -13,60 +13,6 @@ if (!in_array($role_ID, [1, 2])) {
 $cohorts = $conn->query("SELECT * FROM cohortdata WHERE cohort_status = 1 ORDER BY cohort_ID DESC")->fetchAll(PDO::FETCH_ASSOC);
 $classes = $conn->query("SELECT * FROM classdata ORDER BY c_ID")->fetchAll(PDO::FETCH_ASSOC);
 $groups = $conn->query("SELECT * FROM groupdata WHERE group_status = 1 ORDER BY group_ID")->fetchAll(PDO::FETCH_ASSOC);
-
-// 確保 filedata 表存在（僅限此頁面使用，不變更版面）
-try {
-    $conn->exec("
-        CREATE TABLE IF NOT EXISTS filedata (
-            file_ID INT UNSIGNED NOT NULL AUTO_INCREMENT,
-            file_name VARCHAR(255) NOT NULL,
-            file_url VARCHAR(255) NOT NULL,
-            file_des TEXT DEFAULT NULL,
-            is_required TINYINT(1) DEFAULT 0,
-            file_start_d DATETIME DEFAULT NULL,
-            file_end_d DATETIME DEFAULT NULL,
-            file_status TINYINT(1) DEFAULT 1,
-            is_top TINYINT(1) DEFAULT 0,
-            file_update_d DATETIME DEFAULT CURRENT_TIMESTAMP,
-            PRIMARY KEY (file_ID)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
-    ");
-
-    $countStmt = $conn->query("SELECT COUNT(*) FROM filedata");
-    $hasFiledataRows = (int)$countStmt->fetchColumn() > 0;
-
-    if (!$hasFiledataRows) {
-        $legacyExistsStmt = $conn->query("SHOW TABLES LIKE 'file'");
-        $legacyTableExists = (bool)$legacyExistsStmt->fetchColumn();
-
-        if ($legacyTableExists) {
-            $legacyRows = $conn->query("
-                SELECT file_ID, file_name, file_url, file_status, is_top, file_updated_d
-                FROM file
-            ")->fetchAll(PDO::FETCH_ASSOC);
-
-            if ($legacyRows) {
-                $insertStmt = $conn->prepare("
-                    INSERT INTO filedata (file_ID, file_name, file_url, file_status, is_top, file_update_d)
-                    VALUES (?, ?, ?, ?, ?, ?)
-                ");
-
-                foreach ($legacyRows as $row) {
-                    $insertStmt->execute([
-                        $row['file_ID'] ?? null,
-                        $row['file_name'] ?? '',
-                        $row['file_url'] ?? '',
-                        $row['file_status'] ?? 1,
-                        $row['is_top'] ?? 0,
-                        $row['file_updated_d'] ?? date('Y-m-d H:i:s'),
-                    ]);
-                }
-            }
-        }
-    }
-} catch (Throwable $e) {
-    // 佈署環境可能無權建立資料表，忽略錯誤以免影響版面
-}
 ?>
 <!DOCTYPE html>
 <html lang="zh-Hant">
@@ -357,7 +303,7 @@ try {
                                            v-model="selectedFiles">
                                 </td>
                                 <td class="text-start">
-                                    <div class="fw-bold">{{ file.file_name || '(未命名)' }}</div>
+                                    <div class="fw-bold">{{ file.file_name }}</div>
                                     <small class="text-muted" v-if="file.file_des">{{ file.file_des }}</small>
                                 </td>
                                 <td class="text-start">
@@ -385,13 +331,11 @@ try {
                                     <span v-else class="badge bg-secondary">非必繳</span>
                                 </td>
                                 <td>
-                                    <a v-if="file.file_url" 
-                                       :href="file.file_url" 
+                                    <a :href="file.file_url" 
                                        target="_blank" 
                                        class="btn btn-sm btn-outline-primary">
                                         <i class="fa-solid fa-eye me-1"></i>查看
                                     </a>
-                                    <span v-else class="text-muted">無檔案</span>
                                 </td>
                                 <td class="text-start">
                                     <div v-if="file.file_start_d">
@@ -430,14 +374,12 @@ try {
                                         <button type="button" 
                                                 class="btn btn-sm btn-outline-primary"
                                                 @click="editFile(file)"
-                                                :disabled="!file.file_ID"
                                                 title="編輯">
                                             <i class="fa-solid fa-edit"></i>
                                         </button>
                                         <button type="button" 
                                                 class="btn btn-sm btn-outline-danger"
                                                 @click="deleteFile(file)"
-                                                :disabled="!file.file_ID"
                                                 title="刪除">
                                             <i class="fa-solid fa-trash"></i>
                                         </button>
@@ -518,63 +460,19 @@ try {
           if (!res.ok) throw new Error('HTTP ' + res.status + ' ' + res.statusText);
 
           let data;
-          try {
-            data = JSON.parse(raw);
-          } catch {
-            throw new Error('後端回傳不是 JSON');
-          }
+          try { data = JSON.parse(raw); }
+          catch { throw new Error('回應不是 JSON'); }
 
-          // 後端不論是回傳 array 或 {ok:true, data:[...]} 或 {rows:[...]} 都統一處理
-          let list = Array.isArray(data)
-            ? data
-            : (data && data.ok && Array.isArray(data.data)) 
-              ? data.data
-              : Array.isArray(data.rows)
-                ? data.rows
-                : Array.isArray(data.data)
-                  ? data.data
-                  : [];
+          const list = Array.isArray(data) ? data
+                     : (data && Array.isArray(data.rows)) ? data.rows
+                     : (data && Array.isArray(data.data)) ? data.data
+                     : null;
 
-          // 調試：查看原始數據
-          console.log('原始數據:', data);
-          console.log('解析後的列表:', list);
-
-          // 🌟 核心：你的 DB 是 docdata，不是 filedata
-          // 這裡把 doc_xxx → file_xxx 做統一轉換
-          list = list.map(d => {
-            const fileId = d.doc_ID ?? d.file_ID ?? null;
-            const fileName = d.doc_name ?? d.file_name ?? '';
-            const fileUrl = d.doc_example ?? d.file_url ?? '';
-            
-            // 確保 file_url 是完整路徑
-            let fullUrl = fileUrl;
-            if (fullUrl && !fullUrl.startsWith('http') && !fullUrl.startsWith('/')) {
-              fullUrl = '../' + fullUrl;
-            }
-            
-            return {
-              file_ID: fileId,
-              file_name: fileName,
-              file_des: d.doc_des ?? d.file_des ?? '',
-              file_url: fullUrl,
-              file_status: d.doc_status ?? d.file_status ?? 1,
-              is_required: d.is_required ?? 0,
-              is_top: d.is_top ?? 0,
-              file_start_d: d.doc_start_d ?? d.file_start_d ?? null,
-              file_end_d: d.doc_end_d ?? d.file_end_d ?? null,
-
-              // 你的 docdata 沒目標範圍 → 前端需要預設成空資料避免報錯
-              target_all: d.target_all ?? false,
-              target_cohorts: d.target_cohorts ?? [],
-              target_grades: d.target_grades ?? [],
-              target_classes: d.target_classes ?? []
-            };
-          }).filter(f => f.file_ID !== null && f.file_ID !== undefined); // 過濾掉無效的記錄
+          if (!list) throw new Error('資料格式錯誤');
 
           files.value = list;
           sortFiles();
           filterFiles();
-
         } catch (e) {
           console.error('fetchFiles error:', e);
           error.value = '載入失敗（' + e.message + '）';
@@ -711,19 +609,9 @@ try {
           
           const res = await fetch(endpoint, { method: 'POST', body: fd });
           const raw = await res.text();
-
-          let data = null;
-          try { data = JSON.parse(raw); }
-          catch (e) {
-            if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
-            throw new Error('伺服器回傳格式錯誤');
-          }
-
-          if (!res.ok) {
-            const msg = (data && (data.msg || data.message)) || `HTTP ${res.status}: ${res.statusText}`;
-            throw new Error(msg);
-          }
+          if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
           
+          const data = JSON.parse(raw);
           if (data.ok || data.status === 'success') {
             Swal.fire({ 
               icon: 'success', 
@@ -735,7 +623,7 @@ try {
             resetForm();
             await fetchFiles();
           } else {
-            throw new Error((data && (data.message || data.msg)) || '操作失敗');
+            throw new Error(data.message || '操作失敗');
           }
         } catch (err) {
           Swal.fire({ 
@@ -761,9 +649,9 @@ try {
           file_start_d: file.file_start_d ? file.file_start_d.replace(' ', 'T').substring(0, 16) : '',
           file_end_d: file.file_end_d ? file.file_end_d.replace(' ', 'T').substring(0, 16) : '',
           target_all: file.target_all || false,
-          target_cohorts: Array.isArray(file.target_cohorts) ? [...file.target_cohorts] : [],
-          target_grades: Array.isArray(file.target_grades) ? [...file.target_grades] : [],
-          target_classes: Array.isArray(file.target_classes) ? [...file.target_classes] : []
+          target_cohorts: file.target_cohorts || [],
+          target_grades: file.target_grades || [],
+          target_classes: file.target_classes || []
         };
         
         // 滾動到表單
@@ -771,21 +659,9 @@ try {
       };
 
       const deleteFile = async (file) => {
-        if (!file.file_ID) {
-          Swal.fire({
-            icon: 'error',
-            title: '無法刪除',
-            text: '文件ID無效',
-            reverseButtons: true,
-            confirmButtonText: '確定',
-            confirmButtonColor: '#3085d6'
-          });
-          return;
-        }
-
         const result = await Swal.fire({
           title: '確認刪除',
-          text: `確定要刪除「${file.file_name || '(未命名)'}」嗎？此操作無法復原。`,
+          text: `確定要刪除「${file.file_name}」嗎？此操作無法復原。`,
           icon: 'warning',
           showCancelButton: true,
           reverseButtons: true,
@@ -797,27 +673,13 @@ try {
 
         if (result.isConfirmed) {
           try {
-            console.log('刪除文件，file_ID:', file.file_ID);
             const res = await fetch(`${API_ROOT}?do=delete_file`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ file_ID: file.file_ID })
             });
-            const raw = await res.text();
-            
-            let data = null;
-            try { data = JSON.parse(raw); }
-            catch (e) {
-              if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
-              throw new Error('伺服器回傳格式錯誤');
-            }
-
-            if (!res.ok) {
-              const msg = (data && (data.msg || data.message)) || `HTTP ${res.status}: ${res.statusText}`;
-              throw new Error(msg);
-            }
-
-            if (data && (data.ok || data.status === 'success')) {
+            const data = await res.json();
+            if (data.ok || data.status === 'success') {
               Swal.fire({ 
                 icon: 'success', 
                 title: '刪除成功',
@@ -827,7 +689,7 @@ try {
               });
               await fetchFiles();
             } else {
-              throw new Error((data && (data.message || data.msg)) || '刪除失敗');
+              throw new Error(data.message || '刪除失敗');
             }
           } catch (err) {
             Swal.fire({ 
@@ -864,21 +726,8 @@ try {
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ file_IDs: selectedFiles.value })
             });
-            const raw = await res.text();
-            
-            let data = null;
-            try { data = JSON.parse(raw); }
-            catch (e) {
-              if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
-              throw new Error('伺服器回傳格式錯誤');
-            }
-
-            if (!res.ok) {
-              const msg = (data && (data.msg || data.message)) || `HTTP ${res.status}: ${res.statusText}`;
-              throw new Error(msg);
-            }
-
-            if (data && (data.ok || data.status === 'success')) {
+            const data = await res.json();
+            if (data.ok || data.status === 'success') {
               Swal.fire({ 
                 icon: 'success', 
                 title: '批量刪除成功',
@@ -889,7 +738,7 @@ try {
               selectedFiles.value = [];
               await fetchFiles();
             } else {
-              throw new Error((data && (data.message || data.msg)) || '刪除失敗');
+              throw new Error(data.message || '刪除失敗');
             }
           } catch (err) {
             Swal.fire({ 
