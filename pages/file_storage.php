@@ -194,12 +194,15 @@ $respondList = static function (bool $onlyActive = false) use ($pdo): void {
           }
         }
         unset($row);
-      } catch (Throwable $e) {
+} catch (Throwable $e) {
         // ignore if the table is missing
       }
     }
 
-    json_ok(['data' => $rows]);
+    // 直接返回數組，與 f1.php 期望的格式一致
+    header('Content-Type: application/json; charset=utf-8');
+    echo json_encode($rows, JSON_UNESCAPED_UNICODE);
+  exit;
 } catch (Throwable $e) {
     json_err('資料讀取失敗：' . $e->getMessage());
   }
@@ -291,6 +294,7 @@ $handleUpload = static function (bool $withTargets = true) use ($pdo, $normalize
     json_err('請選擇要上傳的檔案');
   }
 
+  // 檢查檔名重複
   try {
     $stmt = $pdo->prepare('SELECT COUNT(*) FROM filedata WHERE file_name = ?');
     $stmt->execute([$fileName]);
@@ -324,9 +328,18 @@ $handleUpload = static function (bool $withTargets = true) use ($pdo, $normalize
   $fileEnd = $normalizeDateTime($_POST['file_end_d'] ?? null);
 
   $targetAll = $withTargets ? (int)($_POST['target_all'] ?? 0) : 0;
-  $targetCohorts = $withTargets ? (json_decode($_POST['target_cohorts'] ?? '[]', true) ?: []) : [];
-  $targetGrades = $withTargets ? (json_decode($_POST['target_grades'] ?? '[]', true) ?: []) : [];
-  $targetClasses = $withTargets ? (json_decode($_POST['target_classes'] ?? '[]', true) ?: []) : [];
+  $targetCohortsRaw = $withTargets ? ($_POST['target_cohorts'] ?? '[]') : '[]';
+  $targetGradesRaw = $withTargets ? ($_POST['target_grades'] ?? '[]') : '[]';
+  $targetClassesRaw = $withTargets ? ($_POST['target_classes'] ?? '[]') : '[]';
+  
+  $targetCohorts = $withTargets ? (json_decode($targetCohortsRaw, true) ?: []) : [];
+  $targetGrades = $withTargets ? (json_decode($targetGradesRaw, true) ?: []) : [];
+  $targetClasses = $withTargets ? (json_decode($targetClassesRaw, true) ?: []) : [];
+  
+  // 防呆：確保是數組格式
+  if (!is_array($targetCohorts)) $targetCohorts = [];
+  if (!is_array($targetGrades)) $targetGrades = [];
+  if (!is_array($targetClasses)) $targetClasses = [];
 
   $ensureFileColumns();
   if ($withTargets) {
@@ -358,13 +371,19 @@ $handleUpload = static function (bool $withTargets = true) use ($pdo, $normalize
           ON DUPLICATE KEY UPDATE file_target_ID = VALUES(file_target_ID)
         ");
         foreach ($targetCohorts as $id) {
-          $insertTarget->execute([$fileId, 'COHORT', $id]);
+          if ($id !== null && $id !== '') {
+            $insertTarget->execute([$fileId, 'COHORT', (string)$id]);
+          }
         }
         foreach ($targetGrades as $id) {
-          $insertTarget->execute([$fileId, 'GRADE', $id]);
+          if ($id !== null && $id !== '') {
+            $insertTarget->execute([$fileId, 'GRADE', (string)$id]);
+          }
         }
         foreach ($targetClasses as $id) {
-          $insertTarget->execute([$fileId, 'CLASS', $id]);
+          if ($id !== null && $id !== '') {
+            $insertTarget->execute([$fileId, 'CLASS', (string)$id]);
+          }
         }
       }
     }
@@ -377,6 +396,131 @@ $handleUpload = static function (bool $withTargets = true) use ($pdo, $normalize
     }
     @unlink($savePath);
     json_err('資料寫入失敗：' . $e->getMessage());
+  }
+};
+
+$handleUpdateWithTargets = static function () use ($pdo, $normalizeDateTime, $ensureFileColumns, $ensureTargetTable): void {
+  $fileId = (int)($_POST['file_ID'] ?? 0);
+  if ($fileId <= 0) {
+    json_err('file_ID 無效');
+  }
+
+  $fileName = trim($_POST['file_name'] ?? '');
+  if ($fileName === '') {
+    json_err('缺少表單名稱');
+  }
+
+  $fileDes = trim($_POST['file_des'] ?? '');
+  $isRequired = isset($_POST['is_required']) ? (int)$_POST['is_required'] : 0;
+  $fileStart = $normalizeDateTime($_POST['file_start_d'] ?? null);
+  $fileEnd = $normalizeDateTime($_POST['file_end_d'] ?? null);
+
+  $targetAll = (int)($_POST['target_all'] ?? 0);
+  $targetCohortsRaw = $_POST['target_cohorts'] ?? '[]';
+  $targetGradesRaw = $_POST['target_grades'] ?? '[]';
+  $targetClassesRaw = $_POST['target_classes'] ?? '[]';
+  
+  $targetCohorts = json_decode($targetCohortsRaw, true) ?: [];
+  $targetGrades = json_decode($targetGradesRaw, true) ?: [];
+  $targetClasses = json_decode($targetClassesRaw, true) ?: [];
+  
+  // 防呆：確保是數組格式
+  if (!is_array($targetCohorts)) $targetCohorts = [];
+  if (!is_array($targetGrades)) $targetGrades = [];
+  if (!is_array($targetClasses)) $targetClasses = [];
+
+  $ensureFileColumns();
+  $ensureTargetTable();
+
+  try {
+    $pdo->beginTransaction();
+
+    // 如果有新檔案，處理上傳
+    $fileUrl = null;
+    if (!empty($_FILES['file']['name'])) {
+      $ext = strtolower(pathinfo($_FILES['file']['name'], PATHINFO_EXTENSION));
+      if ($ext !== 'pdf') {
+        $pdo->rollBack();
+        json_err('僅允許上傳 PDF');
+      }
+
+      $dir = realpath(__DIR__ . '/..') . '/templates';
+      if (!is_dir($dir) && !mkdir($dir, 0775, true) && !is_dir($dir)) {
+        $pdo->rollBack();
+        json_err('無法建立儲存目錄');
+      }
+
+      $saveName = 'tpl_' . date('Ymd_His') . '_' . bin2hex(random_bytes(3)) . '.pdf';
+      $savePath = $dir . '/' . $saveName;
+      if (!move_uploaded_file($_FILES['file']['tmp_name'], $savePath)) {
+        $pdo->rollBack();
+        json_err('檔案上傳失敗');
+      }
+
+      $fileUrl = 'templates/' . $saveName;
+    }
+
+    // 更新文件資料
+    if ($fileUrl) {
+      $stmt = $pdo->prepare("
+        UPDATE filedata
+        SET file_name = ?, file_url = ?, file_des = ?, is_required = ?, file_start_d = ?, file_end_d = ?, file_update_d = NOW()
+        WHERE file_ID = ?
+      ");
+      $stmt->execute([$fileName, $fileUrl, $fileDes, $isRequired, $fileStart, $fileEnd, $fileId]);
+    } else {
+      $stmt = $pdo->prepare("
+        UPDATE filedata
+        SET file_name = ?, file_des = ?, is_required = ?, file_start_d = ?, file_end_d = ?, file_update_d = NOW()
+        WHERE file_ID = ?
+      ");
+      $stmt->execute([$fileName, $fileDes, $isRequired, $fileStart, $fileEnd, $fileId]);
+    }
+
+    // 刪除舊的目標範圍
+    try {
+      $stmt = $pdo->prepare("DELETE FROM filetargetdata WHERE file_ID = ?");
+      $stmt->execute([$fileId]);
+    } catch (Throwable $e) {
+      // ignore if table missing
+    }
+
+    // 插入新的目標範圍
+    if ($targetAll) {
+      $stmt = $pdo->prepare("
+        INSERT INTO filetargetdata (file_ID, file_target_type, file_target_ID)
+        VALUES (?, 'ALL', '1')
+      ");
+      $stmt->execute([$fileId]);
+    } else {
+      $insertTarget = $pdo->prepare("
+        INSERT INTO filetargetdata (file_ID, file_target_type, file_target_ID)
+        VALUES (?, ?, ?)
+      ");
+      foreach ($targetCohorts as $id) {
+        if ($id !== null && $id !== '') {
+          $insertTarget->execute([$fileId, 'COHORT', (string)$id]);
+        }
+      }
+      foreach ($targetGrades as $id) {
+        if ($id !== null && $id !== '') {
+          $insertTarget->execute([$fileId, 'GRADE', (string)$id]);
+        }
+      }
+      foreach ($targetClasses as $id) {
+        if ($id !== null && $id !== '') {
+          $insertTarget->execute([$fileId, 'CLASS', (string)$id]);
+        }
+      }
+    }
+
+    $pdo->commit();
+    json_ok(['status' => 'success', 'file_ID' => $fileId]);
+  } catch (Throwable $e) {
+    if ($pdo->inTransaction()) {
+      $pdo->rollBack();
+    }
+    json_err('更新失敗：' . $e->getMessage());
   }
 };
 
@@ -406,6 +550,12 @@ if ($do !== '') {
         json_err('Method Not Allowed');
       }
       $handleUpdate();
+      break;
+    case 'update_file_with_targets':
+      if ($method !== 'POST') {
+        json_err('Method Not Allowed');
+      }
+      $handleUpdateWithTargets();
       break;
     case 'delete_file':
       if ($method !== 'POST') {
