@@ -114,8 +114,13 @@ if (!$stmt->fetchColumn()) {
              @click="selectMilestone(milestone)">
             <!-- 卡片頂部 -->
             <div class="card-header-section">
-                <div class="status-badge" :class="getStatusBadgeClass(milestone.ms_status)">
-                    {{ getStatusText(milestone.ms_status) }}
+                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                    <div class="status-badge" :class="getStatusBadgeClass(milestone.ms_status)">
+                        {{ getStatusText(milestone.ms_status) }}
+                    </div>
+                    <div class="priority-badge" :class="getPriorityClass(milestone.ms_priority || 0)">
+                        {{ getPriorityText(milestone.ms_priority || 0) }}
+                    </div>
                 </div>
                 <div class="card-actions">
                     <button class="btn-icon" @click.stop="editMilestone(milestone)" title="編輯">編輯</button>
@@ -267,6 +272,18 @@ if (!$stmt->fetchColumn()) {
                             </label>
                             <input type="datetime-local" v-model="form.ms_end_d" required class="form-control">
                         </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>
+                            優先級
+                        </label>
+                        <select v-model="form.ms_priority" class="form-control">
+                            <option value="0">一般</option>
+                            <option value="1">重要</option>
+                            <option value="2">緊急</option>
+                            <option value="3">超級緊急</option>
+                        </select>
                     </div>
 
                     <div class="form-actions">

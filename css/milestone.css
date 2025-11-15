@@ -284,6 +284,35 @@
     color: #1e40af;
 }
 
+/* 優先級標示 */
+.priority-badge {
+    padding: 0.25rem 0.75rem;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-align: center;
+}
+
+.priority-badge.priority-normal {
+    background: #e2e8f0;
+    color: #475569;
+}
+
+.priority-badge.priority-important {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.priority-badge.priority-urgent {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+.priority-badge.priority-super-urgent {
+    background: #dc2626;
+    color: white;
+}
+
 .card-actions {
     display: flex;
     gap: 0.5rem;

@@ -22,7 +22,8 @@ createApp({
                 ms_desc: '',
                 ms_start_d: '',
                 ms_end_d: '',
-                ms_status: 0
+                ms_status: 0,
+                ms_priority: 0
             }
         };
     },
@@ -111,13 +112,14 @@ createApp({
         editMilestone(milestone) {
             this.form = {
                 ms_ID: milestone.ms_ID,
-                req_ID: milestone.req_ID,
+                req_ID: milestone.req_ID || 0,
                 team_ID: milestone.team_ID,
                 ms_title: milestone.ms_title,
                 ms_desc: milestone.ms_desc || '',
                 ms_start_d: this.formatDateTimeLocal(milestone.ms_start_d),
                 ms_end_d: this.formatDateTimeLocal(milestone.ms_end_d),
-                ms_status: milestone.ms_status
+                ms_status: milestone.ms_status,
+                ms_priority: milestone.ms_priority || 0
             };
             this.showEditModal = true;
         },
@@ -234,7 +236,8 @@ createApp({
                 ms_desc: '',
                 ms_start_d: '',
                 ms_end_d: '',
-                ms_status: 0
+                ms_status: 0,
+                ms_priority: 0
             };
         },
 
@@ -265,6 +268,23 @@ createApp({
             if (status === 1) return '已完成';
             if (status === 2) return '已通過';
             return '未知';
+        },
+
+        // 優先級相關方法
+        getPriorityClass(priority) {
+            if (priority === 0) return 'priority-normal';
+            if (priority === 1) return 'priority-important';
+            if (priority === 2) return 'priority-urgent';
+            if (priority === 3) return 'priority-super-urgent';
+            return 'priority-normal';
+        },
+
+        getPriorityText(priority) {
+            if (priority === 0) return '一般';
+            if (priority === 1) return '重要';
+            if (priority === 2) return '緊急';
+            if (priority === 3) return '超級緊急';
+            return '一般';
         },
 
         // 日期格式化
