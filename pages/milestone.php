@@ -97,9 +97,10 @@ if (!$stmt->fetchColumn()) {
                 </select>
                 <select v-model="filters.status" @change="loadMilestones" class="filter-select">
                     <option value="-1">全部狀態</option>
-                    <option value="0">進行中</option>
-                    <option value="1">已完成</option>
-                    <option value="2">已通過</option>
+                    <option value="1">進行中</option>
+                    <option value="4">待審核</option>
+                    <option value="2">退回</option>
+                    <option value="3">已完成</option>
                 </select>
             </div>
         </div>
@@ -183,14 +184,12 @@ if (!$stmt->fetchColumn()) {
             </div>
 
             <!-- 卡片底部操作 -->
-            <div class="card-footer" v-if="milestone.ms_status === 0">
-                <button class="btn-action btn-complete" @click.stop="approveMilestone(milestone, 'complete')">
-                    標記完成
-                </button>
-            </div>
-            <div class="card-footer" v-if="milestone.ms_status === 1">
+            <div class="card-footer" v-if="milestone.ms_status === 4">
                 <button class="btn-action btn-approve" @click.stop="approveMilestone(milestone, 'approve')">
                     審核通過
+                </button>
+                <button class="btn-action btn-complete" style="margin-top:0.5rem" @click.stop="approveMilestone(milestone, 'reject')">
+                    退回
                 </button>
             </div>
         </div>

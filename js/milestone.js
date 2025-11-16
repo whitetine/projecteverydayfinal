@@ -42,8 +42,45 @@ createApp({
             if (this.filters.status >= 0) {
                 filtered = filtered.filter(m => m.ms_status == this.filters.status);
             }
-            
-            return filtered;
+
+            const copy = [...filtered];
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const todayMs = today.getTime();
+
+            const diffFromToday = (end, start) => {
+                const d = end || start;
+                if (!d) return Number.MAX_SAFE_INTEGER;
+                const t = Date.parse(d);
+                if (Number.isNaN(t)) return Number.MAX_SAFE_INTEGER;
+                return Math.abs(t - todayMs);
+            };
+
+            const statusRank = (s) => {
+                // 0/1:進行中,2:退回,3:已完成,4:待審核
+                if (s === 0 || s === 1 || s === 2) return 0;
+                if (s === 4) return 1;
+                if (s === 3) return 2;
+                return 3;
+            };
+
+            return copy.sort((a, b) => {
+                const ra = statusRank(Number(a.ms_status));
+                const rb = statusRank(Number(b.ms_status));
+                if (ra !== rb) return ra - rb;
+
+                const pa = Number(a.ms_priority ?? 0);
+                const pb = Number(b.ms_priority ?? 0);
+                if (pa === 3 && pb !== 3) return -1;
+                if (pb === 3 && pa !== 3) return 1;
+                if (pb !== pa) return pb - pa;
+
+                const da = diffFromToday(a.ms_end_d, a.ms_start_d);
+                const db = diffFromToday(b.ms_end_d, b.ms_start_d);
+                if (da !== db) return da - db;
+
+                return Number(b.ms_ID || 0) - Number(a.ms_ID || 0);
+            });
         }
     },
     mounted() {
@@ -161,7 +198,7 @@ createApp({
 
         // 審核里程碑
         async approveMilestone(milestone, action) {
-            const actionText = action === 'complete' ? '標記為完成' : '審核通過';
+            const actionText = action === 'approve' ? '審核通過' : '退回';
             const result = await Swal.fire({
                 title: '確認操作',
                 text: `確定要${actionText}「${milestone.ms_title}」嗎？`,
@@ -243,31 +280,35 @@ createApp({
 
         // 狀態相關方法
         getStatusClass(status) {
-            if (status === 0) return 'status-pending';
-            if (status === 1) return 'status-completed';
-            if (status === 2) return 'status-approved';
+            if (status === 0 || status === 1) return 'status-in-progress'; // 0 舊資料也視為進行中
+            if (status === 2) return 'status-rejected';
+            if (status === 3) return 'status-completed';
+            if (status === 4) return 'status-review';
             return '';
         },
 
         getStatusBadgeClass(status) {
-            if (status === 0) return 'pending';
-            if (status === 1) return 'completed';
-            if (status === 2) return 'approved';
+            if (status === 0 || status === 1) return 'in-progress';
+            if (status === 2) return 'rejected';
+            if (status === 3) return 'completed';
+            if (status === 4) return 'review';
             return '';
         },
 
         getStatusIcon(status) {
-            if (status === 0) return 'fa-solid fa-clock';
-            if (status === 1) return 'fa-solid fa-check-circle';
-            if (status === 2) return 'fa-solid fa-stamp';
+            if (status === 0 || status === 1) return 'fa-solid fa-clock';
+            if (status === 2) return 'fa-solid fa-rotate-left';
+            if (status === 3) return 'fa-solid fa-check-circle';
+            if (status === 4) return 'fa-solid fa-hourglass-half';
             return 'fa-solid fa-question';
         },
 
         getStatusText(status) {
-            if (status === 0) return '進行中';
-            if (status === 1) return '已完成';
-            if (status === 2) return '已通過';
-            return '未知';
+            if (status === 0 || status === 1) return '進行中'; // 0 舊資料也視為進行中
+            if (status === 2) return '退回';
+            if (status === 3) return '已完成';
+            if (status === 4) return '待審核';
+            return '未知狀態';
         },
 
         // 優先級相關方法

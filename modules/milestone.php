@@ -381,7 +381,7 @@ switch ($do) {
         // 修改日期：2025-11-16
         // 改動內容：添加優先級欄位處理
         // 相關功能：新增里程碑功能
-        // 方式：在 INSERT 語句中添加 ms_priority 欄位
+        // 方式：在 INSERT 語句中添加 ms_priority 欄位，預設狀態為 1(進行中)
         if ($team_ID <= 0) json_err('請選擇團隊');
         if ($ms_title === '') json_err('請輸入里程碑標題');
         if ($ms_start_d === '' || $ms_end_d === '') json_err('請選擇開始和截止時間');
@@ -397,7 +397,7 @@ switch ($do) {
             $stmt = $conn->prepare("
                 INSERT INTO milesdata 
                 (req_ID, team_ID, ms_title, ms_desc, ms_start_d, ms_end_d, ms_status, ms_priority, ms_created_d)
-                VALUES (?, ?, ?, ?, ?, ?, 0, ?, NOW())
+                VALUES (?, ?, ?, ?, ?, ?, 1, ?, NOW())
             ");
             $stmt->execute([$req_ID_value, $team_ID, $ms_title, $ms_desc, $ms_start_d, $ms_end_d, $ms_priority]);
             
@@ -494,9 +494,9 @@ switch ($do) {
         try {
             // 檢查里程碑是否存在且屬於學生的團隊
             // 修改日期：2025-11-16
-            // 改動內容：允許已提交的里程碑可以再次提交（如果被退件，狀態會變回 0）
+            // 改動內容：允許進行中(1)與退回(2)的里程碑提交完成
             // 相關功能：學生提交里程碑完成
-            // 方式：檢查里程碑是否存在，允許狀態為 0 或 1 的里程碑提交（1 表示已提交但可能被退件）
+            // 方式：檢查里程碑是否存在，允許狀態為 1 或 2 的里程碑提交
             $stmt = $conn->prepare("
                 SELECT m.ms_ID, m.team_ID, m.ms_title, m.ms_status, t.team_project_name
                 FROM milesdata m
@@ -505,7 +505,7 @@ switch ($do) {
                 WHERE m.ms_ID = ? 
                   AND (tm.team_u_ID = ? OR tm.u_ID = ?)
                   AND t.team_status = 1
-                  AND (m.ms_status = 0 OR m.ms_status = 1)
+                  AND (m.ms_status = 1 OR m.ms_status = 2)
                 LIMIT 1
             ");
             $stmt->execute([$ms_ID, $u_ID, $u_ID]);
@@ -515,14 +515,14 @@ switch ($do) {
                 json_err('里程碑不存在或您無權限操作');
             }
             
-            // 更新里程碑狀態為已完成（直接寫入資料表）
+            // 更新里程碑狀態為待審核（直接寫入資料表）
             // 修改日期：2025-11-16
-            // 改動內容：直接更新資料表，如果之前已提交過（狀態為1），則用 UPDATE 方式更新
+            // 改動內容：學生提交完成時，寫入完成者與完成時間，並將狀態設為 4(待審核)
             // 相關功能：學生提交里程碑完成
             // 方式：使用 UPDATE 語句直接寫入資料
             $stmt = $conn->prepare("
                 UPDATE milesdata 
-                SET ms_u_ID = ?, ms_completed_d = NOW(), ms_status = 1
+                SET ms_u_ID = ?, ms_completed_d = NOW(), ms_status = 4
                 WHERE ms_ID = ?
             ");
             $stmt->execute([$u_ID, $ms_ID]);
@@ -591,31 +591,33 @@ switch ($do) {
         }
         break;
 
-    // 審核里程碑（完成/通過）
+    // 審核里程碑（通過/退回）
     case 'approve_milestone':
         $u_ID = checkTeacherPermission();
         
         $ms_ID = isset($p['ms_ID']) ? (int)$p['ms_ID'] : 0;
-        $action = trim($p['action'] ?? ''); // 'complete' 或 'approve'
+        $action = trim($p['action'] ?? ''); // 'approve' 或 'reject'
         
         if ($ms_ID <= 0) json_err('里程碑ID無效');
-        if (!in_array($action, ['complete', 'approve'])) json_err('無效的操作');
+        if (!in_array($action, ['approve', 'reject'])) json_err('無效的操作');
         
         try {
-            if ($action === 'complete') {
+            if ($action === 'approve') {
+                // 通過：保留學生提交的完成時間與完成者，寫入審核者與審核時間，狀態改為 3(已完成)
                 $stmt = $conn->prepare("
                     UPDATE milesdata 
-                    SET ms_u_ID = ?, ms_completed_d = NOW(), ms_status = 1
+                    SET ms_approved_u_ID = ?, ms_approved_d = NOW(), ms_status = 3
                     WHERE ms_ID = ?
                 ");
                 $stmt->execute([$u_ID, $ms_ID]);
-            } elseif ($action === 'approve') {
+            } elseif ($action === 'reject') {
+                // 退回：保留完成時間與完成者，清除審核資訊，狀態改為 2(退回)
                 $stmt = $conn->prepare("
                     UPDATE milesdata 
-                    SET ms_approved_u_ID = ?, ms_approved_d = NOW(), ms_status = 2
+                    SET ms_approved_u_ID = NULL, ms_approved_d = NULL, ms_status = 2
                     WHERE ms_ID = ?
                 ");
-                $stmt->execute([$u_ID, $ms_ID]);
+                $stmt->execute([$ms_ID]);
             }
             
             json_ok(['message' => '操作成功']);

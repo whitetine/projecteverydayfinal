@@ -90,11 +90,15 @@ if (!$studentTeam) {
     <!-- 里程碑列表 -->
     <div class="milestones-list" v-if="milestones.length > 0">
         <div 
-            v-for="(milestone, index) in milestones" 
+            v-for="(milestone, index) in sortedMilestones" 
             :key="milestone.ms_ID"
             class="milestone-card"
             :class="getStatusClass(milestone.ms_status)">
             
+            <!-- 超級緊急圖釘標示 -->
+            <div class="pin-badge" v-if="Number(milestone.ms_priority) === 3" title="超級緊急置頂">
+                <i class="fa-solid fa-thumbtack"></i>
+            </div>
             <!-- 優先級標示 -->
             <div class="priority-badge" :class="getPriorityClass(milestone.ms_priority)">
                 {{ getPriorityText(milestone.ms_priority) }}
@@ -145,13 +149,13 @@ if (!$studentTeam) {
             </div>
 
             <!-- 操作按鈕 -->
-            <div class="milestone-actions" v-if="milestone.ms_status === 0 || milestone.ms_status === 1">
+            <div class="milestone-actions">
                 <button 
                     class="btn-complete" 
-                    :class="{ 'btn-disabled': milestone.isSubmitting || milestone.ms_status === 2 }"
-                    :disabled="milestone.isSubmitting || milestone.ms_status === 2"
+                    :class="{ 'btn-disabled': isActionDisabled(milestone) }"
+                    :disabled="isActionDisabled(milestone)"
                     @click.stop="completeMilestone(milestone)">
-                    {{ milestone.isSubmitting ? '提交中...' : '提交完成' }}
+                    {{ getActionButtonText(milestone) }}
                 </button>
             </div>
         </div>

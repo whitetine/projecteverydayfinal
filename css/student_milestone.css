@@ -243,16 +243,26 @@
     transform: scaleX(1);
 }
 
-.milestone-card.status-pending {
+.milestone-card.status-in-progress {
     border-left: 4px solid #f59e0b;
+}
+
+.milestone-card.status-rejected {
+    border-left: 4px solid #f97316;
+}
+
+.milestone-card.status-review {
+    border-left: 4px solid #3b82f6;
 }
 
 .milestone-card.status-completed {
     border-left: 4px solid #10b981;
+    opacity: 0.9;
 }
 
-.milestone-card.status-approved {
-    border-left: 4px solid #3b82f6;
+.milestone-card.status-deleted {
+    border-left: 4px solid #9ca3af;
+    opacity: 0.6;
 }
 
 /* 優先級標示 */
@@ -293,6 +303,19 @@
     color: white;
     box-shadow: 0 4px 6px rgba(220, 38, 38, 0.3);
     animation: pulse 2s infinite;
+}
+
+/* 圖釘置頂標示（僅超級緊急顯示） */
+.pin-badge {
+    position: absolute;
+    top: 0.85rem;
+    left: 0.85rem;
+    font-size: 1rem;
+    line-height: 1;
+    filter: drop-shadow(0 1px 1px rgba(0,0,0,.2));
+    z-index: 3;
+    user-select: none;
+    pointer-events: none;
 }
 
 @keyframes pulse {
@@ -341,22 +364,30 @@
     flex-shrink: 0;
 }
 
-.milestone-status.pending {
+.milestone-status.in-progress {
     background: #fef3c7;
     color: #92400e;
     border: 1px solid #fde68a;
 }
-
+.milestone-status.rejected {
+    background: #fee2e2;
+    color: #b91c1c;
+    border: 1px solid #fecaca;
+}
+.milestone-status.review {
+    background: #dbeafe;
+    color: #1d4ed8;
+    border: 1px solid #93c5fd;
+}
 .milestone-status.completed {
     background: #d1fae5;
     color: #065f46;
     border: 1px solid #86efac;
 }
-
-.milestone-status.approved {
-    background: #dbeafe;
-    color: #1e40af;
-    border: 1px solid #93c5fd;
+.milestone-status.deleted {
+    background: #e5e7eb;
+    color: #4b5563;
+    border: 1px solid #d1d5db;
 }
 
 .milestone-desc {
