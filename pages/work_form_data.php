@@ -1,4 +1,5 @@
 <?php
+//註解
 session_start();
 require '../includes/pdo.php';
 header('Content-Type: application/json; charset=utf-8');

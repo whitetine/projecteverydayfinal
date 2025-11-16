@@ -6,7 +6,7 @@ function resolveWorkDraftApiUrl() {
   }
   return 'pages/work_draft_data.php';
 }
-
+//註解
 window.initWorkDraft = function () {
   const table = document.querySelector('#work-table-body');
   if (!table) {

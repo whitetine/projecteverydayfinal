@@ -1,3 +1,4 @@
+
 /* ==============================
    固定表格、不浮動、不捲動、像 Excel 格線
    ============================== */
@@ -420,8 +421,7 @@ body #commentModal .modal-dialog {
   #cmn-text {
     font-size: 0.875rem;
   }
-}
-
+}/* 註解*/
 /* 橫向模式優化 */
 @media (max-width: 991px) and (orientation: landscape) {
   /* 表格在橫向模式下保持可讀性 */
@@ -438,4 +438,10 @@ body #commentModal .modal-dialog {
     max-height: calc(90vh - 120px);
     overflow-y: auto;
   }
+
+
+
 }
+.pager-bar a:hover{ background:#ffe2c2; }
+.pager-bar .active{ background:#f4a460; color:#fff; font-weight:700; }
+.pager-bar .disabled{ color:#aaa; pointer-events:none; }

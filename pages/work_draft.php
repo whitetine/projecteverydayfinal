@@ -1,5 +1,5 @@
 <?php
-session_start();
+session_start();//註解
 if (!isset($_SESSION['u_ID'])) {
     echo "<script>alert('請先登入');location.href='../index.php';</script>";
     exit;

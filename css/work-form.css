@@ -1,10 +1,10 @@
 
-/* ====== Hint text ====== */
+/* ====== Hint text  ====== */
 .work-form-page .hint {
   font-size: .9rem;
   color: #6c757d;
 }
-
+/* 註解*/
 /* ====== Section Box ====== */
 .work-form-page .section-box {
   border: 2px solid #444;

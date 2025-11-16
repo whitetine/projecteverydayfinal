@@ -1,7 +1,7 @@
 function resolveWorkFormApiUrl() {
   const formEl = document.getElementById("work-main-form");
   const path = window.location.pathname || "";
-
+//註解
   if (!formEl) {
     if (path.includes("/pages/")) {
       return "work_form_data.php";

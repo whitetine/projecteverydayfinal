@@ -1,4 +1,4 @@
-<?php
+<?php//註解
 session_start();
 require '../includes/pdo.php';
 
