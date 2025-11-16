@@ -49,8 +49,8 @@ $isAdmin = in_array($role_ID, [1, 2]);
  <a class="nav-link ajax-link" href="pages/apply.php">
       <i class="fa-solid fa-file-arrow-up"></i><span>文件管理</span>
     </a>
-
-    
+          <a class="nav-link ajax-link" href="pages/student_milestone.php">
+      <i class="fa-solid fa-flag-checkered"></i><span>破關斬將</span></a>
           <a class="nav-link ajax-link" href="pages/work_form.php">
       <i class="fa-solid fa-file-circle-plus"></i><span>work_form</span></a>
     <?php elseif ($role_ID == 4): ?>
@@ -59,6 +59,8 @@ $isAdmin = in_array($role_ID, [1, 2]);
       <i class="fa-solid fa-star"></i><span>互評(status)</span></a>
           <a class="nav-link ajax-link" href="pages/teacher_review_detail.php">
       <i class="fa-solid fa-list-check"></i><span>互評(detail)</span></a>
+          <a class="nav-link ajax-link" href="pages/milestone.php">
+      <i class="fa-solid fa-flag-checkered"></i><span>里程碑管理</span></a>
     <?php endif; ?>
    
 </div>
