@@ -2,16 +2,7 @@
 session_start();
 require '../includes/pdo.php';
 
-if (!isset($_SESSION['u_ID'])) {
-    http_response_code(401);
-    exit('Unauthorized');
-}
-
-$allowedSort = ['created', 'start', 'end', 'active'];
 $sort = $_REQUEST['sort'] ?? 'created';
-if (!in_array($sort, $allowedSort, true)) {
-    $sort = 'created';
-}
 
 /* 排序 */
 switch ($sort) {
@@ -74,33 +65,63 @@ if ($_POST['action'] ?? '' === 'delete') {
 
 /* 取得屆別 */
 if (isset($_GET['cohort_list'])) {
-    $stmt = $conn->prepare("SELECT cohort_ID, cohort_name, year_label FROM cohortdata ORDER BY cohort_ID ASC");
-    $stmt->execute();
-    header('Content-Type: application/json; charset=utf-8');
-    echo json_encode($stmt->fetchAll(PDO::FETCH_ASSOC), JSON_UNESCAPED_UNICODE);
-    exit;
+
+  ob_clean(); // 🔥 清除之前所有 output（防止 BOM）
+  header('Content-Type: application/json; charset=utf-8');
+
+  $stmt = $conn->prepare("
+      SELECT
+          cohort_ID,
+          cohort_name,
+          year_label
+      FROM cohortdata
+      WHERE cohort_status = 1  /* 如果你只想抓啟用的 */
+      ORDER BY cohort_ID ASC
+  ");
+  $stmt->execute();
+
+  $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+  echo json_encode($rows, JSON_UNESCAPED_UNICODE);
+  exit;
 }
 
-/* 取得團隊清單 */
+
+/* 取得指定屆別的團隊 */
 if (isset($_GET['team_list'])) {
-    $stmt = $conn->prepare("SELECT team_ID, team_project_name, cohort_ID FROM teamdata ORDER BY team_project_name ASC");
-    $stmt->execute();
-    header('Content-Type: application/json; charset=utf-8');
-    echo json_encode($stmt->fetchAll(PDO::FETCH_ASSOC), JSON_UNESCAPED_UNICODE);
-    exit;
+
+  ob_clean();
+  header('Content-Type: application/json; charset=utf-8');
+
+  $cohortId = $_GET['cohort_id'] ?? null;
+
+  if (!$cohortId) {
+      echo json_encode([]);
+      exit;
+  }
+
+  $stmt = $conn->prepare("
+      SELECT team_ID, team_project_name
+      FROM teamdata
+      WHERE cohort_ID = ?
+        AND team_status = 1
+      ORDER BY team_project_name ASC
+  ");
+  $stmt->execute([$cohortId]);
+
+  echo json_encode($stmt->fetchAll(PDO::FETCH_ASSOC), JSON_UNESCAPED_UNICODE);
+  exit;
 }
+
 
 /* 取得表格資料 */
-$sql = "SELECT p.*, c.cohort_name, c.year_label, t.team_project_name
+$sql = "SELECT p.*, c.cohort_name, c.year_label
         FROM perioddata p
         LEFT JOIN cohortdata c ON p.cohort_ID = c.cohort_ID
-        LEFT JOIN teamdata t ON p.pe_target_ID = t.team_ID
         $orderBy";
 $stmt = $conn->prepare($sql);
 $stmt->execute();
 $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-header('Content-Type: text/html; charset=utf-8');
 
 /* Rank by created */
 $rankByCreated = [];
@@ -130,7 +151,7 @@ foreach ($tmp as $r) $rankByCreated[$r['period_ID']] = $i++;
       <td><?= htmlspecialchars($r['period_start_d']) ?></td>
       <td><?= htmlspecialchars($r['period_end_d']) ?></td>
       <td><?= htmlspecialchars($r['period_title']) ?></td>
-      <td><?= htmlspecialchars($r['team_project_name'] ?? $r['pe_target_ID']) ?></td>
+      <td><?= htmlspecialchars($r['pe_target_ID']) ?></td>
       <td><?= htmlspecialchars($r['cohort_name']) ?> (<?= htmlspecialchars($r['year_label']) ?>)</td>
       <td><?= $r['pe_status'] ? '✔' : '✘' ?></td>
       <td><?= htmlspecialchars($r['pe_created_d']) ?></td>

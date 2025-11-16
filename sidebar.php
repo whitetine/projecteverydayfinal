@@ -43,6 +43,10 @@ $isAdmin = in_array($role_ID, [1, 2]);
 
           <a class="nav-link ajax-link" href="pages/apply_preview.php">
       <i class="fa-solid fa-eye"></i><span>apply_preview</span></a>
+
+      <a class="nav-link ajax-link" href="pages/checkreviewperiods.php">
+      <i class="fa-solid fa-eye"></i><span>評分時段管理</span></a>
+     
        <!-- <a class="nav-link ajax-link" href="pages/admin_notify.php">
       <i class="fa-solid fa-file-lines"></i><span>notify</span></a> -->
       <?php elseif ($role_ID == 6): ?>
@@ -52,7 +56,7 @@ $isAdmin = in_array($role_ID, [1, 2]);
           <a class="nav-link ajax-link" href="pages/student_milestone.php">
       <i class="fa-solid fa-flag-checkered"></i><span>破關斬將</span></a>
           <a class="nav-link ajax-link" href="pages/work_form.php">
-      <i class="fa-solid fa-file-circle-plus"></i><span>work_form</span></a>
+      <i class="fa-solid fa-file-circle-plus"></i><span>工作日誌</span></a>
     <?php elseif ($role_ID == 4): ?>
       
        <a class="nav-link ajax-link" href="pages/teacher_review_status.php">
