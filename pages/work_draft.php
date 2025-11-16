@@ -103,5 +103,7 @@ if (!$isPartial && !$isAjax && !$isFromMain) {
   </div>
 </div>
 
-<link rel="stylesheet" href="../css/work-draft.css">
-<script src="../js/work-draft.js"></script>
+<!-- <link rel="stylesheet" href="../css/work-draft.css">
+<script src="../js/work-draft.js"></script> -->
+<link rel="stylesheet" href="/projecteveryday/css/work-draft.css">
+<script src="/projecteveryday/js/work-draft.js"></script>
