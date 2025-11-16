@@ -21,6 +21,17 @@ function response($arr) {
 }
 
 try {
+    // 動態偵測使用者欄位（work_u_ID 或 u_ID）
+    $userField = 'work_u_ID';
+    try {
+        $testSt = $conn->query("SHOW COLUMNS FROM $TABLE LIKE 'work_u_ID'");
+        if ($testSt->rowCount() === 0) {
+            $userField = 'u_ID';
+        }
+    } catch (Exception $e) {
+        $userField = 'u_ID';
+    }
+
     if ($action === 'get') {
         // 檢查資料表是否有 work_created_d 欄位
         $hasCreatedD = false;
@@ -35,23 +46,23 @@ try {
         if ($hasCreatedD) {
             $st = $conn->prepare("UPDATE `$TABLE` 
                                   SET work_status = 3 
-                                  WHERE work_u_ID = ? AND work_status = 1 AND DATE(work_created_d) < CURDATE()");
+                                  WHERE $userField = ? AND work_status = 1 AND DATE(work_created_d) < CURDATE()");
         } else {
             $st = $conn->prepare("UPDATE `$TABLE` 
                                   SET work_status = 3 
-                                  WHERE work_u_ID = ? AND work_status = 1 AND DATE(work_update_d) < CURDATE()");
+                                  WHERE $userField = ? AND work_status = 1 AND DATE(work_update_d) < CURDATE()");
         }
         $st->execute([$u_id]);
 
         // 取得今日資料（同時檢查 work_created_d 和 work_update_d）
         if ($hasCreatedD) {
             $st = $conn->prepare("SELECT * FROM `$TABLE` 
-                                  WHERE work_u_ID = ? 
+                                  WHERE $userField = ? 
                                     AND (DATE(work_created_d) = CURDATE() OR DATE(work_update_d) = CURDATE())
                                   ORDER BY work_ID DESC LIMIT 1");
         } else {
             $st = $conn->prepare("SELECT * FROM `$TABLE` 
-                                  WHERE work_u_ID = ? AND DATE(work_update_d) = CURDATE()
+                                  WHERE $userField = ? AND DATE(work_update_d) = CURDATE()
                                   ORDER BY work_ID DESC LIMIT 1");
         }
         $st->execute([$u_id]);
@@ -79,7 +90,7 @@ try {
             // 更新現有記錄
             $st = $conn->prepare("UPDATE `$TABLE`
                                   SET work_title=?, work_content=?, work_status=?, work_update_d=NOW()
-                                  WHERE work_ID=? AND work_u_ID=?");
+                                  WHERE work_ID=? AND $userField=?");
             $st->execute([$title, $content, $status, $work_id, $u_id]);
             
             if ($st->rowCount() === 0) {
@@ -98,11 +109,11 @@ try {
             
             if ($hasCreatedD) {
                 $st = $conn->prepare("INSERT INTO `$TABLE`
-                                      (work_u_ID, work_title, work_content, work_status, work_created_d, work_update_d)
+                                      ($userField, work_title, work_content, work_status, work_created_d, work_update_d)
                                       VALUES (?, ?, ?, ?, NOW(), NOW())");
             } else {
                 $st = $conn->prepare("INSERT INTO `$TABLE`
-                                      (work_u_ID, work_title, work_content, work_status, work_update_d)
+                                      ($userField, work_title, work_content, work_status, work_update_d)
                                       VALUES (?, ?, ?, ?, NOW())");
             }
             $st->execute([$u_id, $title, $content, $status]);

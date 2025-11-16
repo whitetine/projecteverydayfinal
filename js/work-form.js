@@ -66,12 +66,19 @@ async function saveData(type) {
     const j = await res.json();
 
     if (j.success) {
-      // 成功後顯示提示訊息，然後跳轉到 work_draft.php
-      Swal.fire("成功", j.msg, "success")
-        .then(() => {
-          // 跳轉到 work_draft.php（透過 hash 路由）
-          window.location.hash = 'pages/work_draft.php';
-        });
+      // 成功後自動關閉提示並跳轉到 work_draft.php（無需按 OK）
+      Swal.fire({
+        title: "成功",
+        text: j.msg,
+        icon: "success",
+        timer: 2000,
+        showConfirmButton: false,
+        allowOutsideClick: false,
+        allowEscapeKey: false
+      }).then(() => {
+        // 跳轉到 work_draft.php（透過 hash 路由）
+        window.location.hash = 'pages/work_draft.php';
+      });
     } else {
       // 失敗時只顯示錯誤訊息
       Swal.fire("錯誤", j.msg, "error");

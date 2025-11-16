@@ -1,7 +1,7 @@
-<?php//註解
+<?php
 session_start();
 require '../includes/pdo.php';
-
+//註解
 if (!isset($_SESSION['u_ID'])) {
     http_response_code(401);
     header('Content-Type: application/json; charset=utf-8');
@@ -56,36 +56,50 @@ function getTeamInfo(PDO $conn, string $u_id): array {
     $userNameMap   = [];
     $my_team_id    = null;
 
-    $st = $conn->prepare("
-        SELECT team_ID 
-        FROM teammember 
-        WHERE team_u_ID=? 
-        ORDER BY tm_updated_d DESC 
-        LIMIT 1
-    ");
-    $st->execute([$u_id]);
-    $my_team_id = $st->fetchColumn();
+    try {
+        $st = $conn->prepare("
+            SELECT team_ID 
+            FROM teammember 
+            WHERE team_u_ID=? 
+            ORDER BY tm_updated_d DESC 
+            LIMIT 1
+        ");
+        $st->execute([$u_id]);
+        $my_team_id = $st->fetchColumn();
+    } catch (Throwable $e) {
+        // 若沒有團隊相關資料表，直接回傳空集合即可（不影響「自己」的清單）
+        return [
+            'team_ids' => [],
+            'name_map' => []
+        ];
+    }
 
     if ($my_team_id) {
-        $st = $conn->prepare("
-            SELECT 
-                tm.team_u_ID, 
-                COALESCE(ud.u_name, tm.team_u_ID) AS u_name
-            FROM teammember tm
-            LEFT JOIN userdata ud 
-                ON ud.u_ID = tm.team_u_ID
-            JOIN userrolesdata ur 
-                ON ur.ur_u_ID = tm.team_u_ID 
-               AND ur.role_ID = 6 
-               AND ur.user_role_status = 1
-            WHERE tm.team_ID = ? 
-              AND tm.tm_status = 1
-            ORDER BY COALESCE(ud.u_name, tm.team_u_ID)
-        ");
-        $st->execute([$my_team_id]);
-        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
-            $teamMemberIDs[] = $r['team_u_ID'];
-            $userNameMap[$r['team_u_ID']] = $r['u_name'];
+        try {
+            $st = $conn->prepare("
+                SELECT 
+                    tm.team_u_ID, 
+                    COALESCE(ud.u_name, tm.team_u_ID) AS u_name
+                FROM teammember tm
+                LEFT JOIN userdata ud 
+                    ON ud.u_ID = tm.team_u_ID
+                JOIN userrolesdata ur 
+                    ON ur.ur_u_ID = tm.team_u_ID 
+                   AND ur.role_ID = 6 
+                   AND ur.user_role_status = 1
+                WHERE tm.team_ID = ? 
+                  AND tm.tm_status = 1
+                ORDER BY COALESCE(ud.u_name, tm.team_u_ID)
+            ");
+            $st->execute([$my_team_id]);
+            foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+                $teamMemberIDs[] = $r['team_u_ID'];
+                $userNameMap[$r['team_u_ID']] = $r['u_name'];
+            }
+        } catch (Throwable $e) {
+            // 若關聯表缺失，視為沒有團隊成員
+            $teamMemberIDs = [];
+            $userNameMap   = [];
         }
     }
 
@@ -164,10 +178,11 @@ if ($action === 'add_comment') {
 
 // ====== Action: list（預設） =====
 if ($action === 'list') {
-    // 取得同隊資訊
-    $teamInfo      = getTeamInfo($conn, $u_id);
-    $teamMemberIDs = $teamInfo['team_ids'];
-    $userNameMap   = $teamInfo['name_map'];
+    try {
+        // 取得同隊資訊
+        $teamInfo      = getTeamInfo($conn, $u_id);
+        $teamMemberIDs = $teamInfo['team_ids'];
+        $userNameMap   = $teamInfo['name_map'];
 
     // 篩選參數
     $who  = $_GET['who']  ?? 'me';
@@ -353,22 +368,31 @@ if ($action === 'list') {
         ];
     }
 
-    echo json_encode([
-        'ok'          => true,
-        'rows'        => $rowsOut,
-        'page'        => $page,
-        'pages'       => $pages,
-        'total'       => $total,
-        'showAuthor'  => $showAuthor,
-        'filter'      => [
-            'who'  => $who,
-            'from' => $from,
-            'to'   => $to,
-        ],
-        'teamMembers' => $teamMembersOut,
-        'me'          => $u_id,
-    ], JSON_UNESCAPED_UNICODE);
-    exit;
+        echo json_encode([
+            'ok'          => true,
+            'rows'        => $rowsOut,
+            'page'        => $page,
+            'pages'       => $pages,
+            'total'       => $total,
+            'showAuthor'  => $showAuthor,
+            'filter'      => [
+                'who'  => $who,
+                'from' => $from,
+                'to'   => $to,
+            ],
+            'teamMembers' => $teamMembersOut,
+            'me'          => $u_id,
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    } catch (Throwable $e) {
+        // 不丟 HTTP 錯誤碼，維持 200 讓前端能解析 JSON
+        echo json_encode([
+            'ok'    => false,
+            'error' => 'server_error',
+            'msg'   => '伺服器錯誤：' . $e->getMessage()
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
 }
 
 // 未知 action
