@@ -7,7 +7,15 @@ function resolveCheckReviewPeriodsApiUrl() {
   return 'pages/checkreviewperiods_data.php';
 }
 
-let cohortMap = {};
+let pendingClassValue = '';
+const teamPickerState = {
+  enabled: true,
+  list: [],
+  selectedIds: [],
+  summaryMessage: '請先選擇屆別',
+  modalSelections: [],
+  pendingSelections: []
+};
 
 function __initCheckReviewPeriods() {
   // 動態設定表單 action
@@ -63,10 +71,13 @@ function __initCheckReviewPeriods() {
     });
   }
   
-  try { setupCohortDropdown(); } catch (e) { console.error(e); }
+  try { setupCohortSelect(); } catch (e) { console.error(e); }
+  try { setupClassSelect(); } catch (e) { console.error(e); }
   try { loadCohortList(); } catch (e) { console.error(e); }
+  try { loadClassList(); } catch (e) { console.error(e); }
   try { loadPeriodTable(); } catch (e) { console.error(e); }
   try { setupModeSelector(); } catch (e) { console.error(e); }
+  try { setupTeamPicker(); } catch (e) { console.error(e); }
 }
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', __initCheckReviewPeriods);
@@ -74,38 +85,23 @@ if (document.readyState === 'loading') {
   __initCheckReviewPeriods();
 }
 
-function setupCohortDropdown() {
-  const btn = document.getElementById('cohortBtn');
-  const menu = document.getElementById('cohortMenu');
-  if (!btn || !menu) return;
-
-  btn.addEventListener('click', (e) => {
-    e.preventDefault();
-    menu.classList.toggle('show');
-  });
-
-  document.addEventListener('click', (e) => {
-    if (!menu.contains(e.target) && !btn.contains(e.target)) {
-      menu.classList.remove('show');
-    }
-  });
+function setupCohortSelect() {
+  const select = document.getElementById('cohortSelect');
+  if (!select) return;
+  select.addEventListener('change', () => handleCohortChange(true));
 }
 
-function buildCohortSummary(ids) {
-  const labels = ids
-    .map(id => cohortMap[id]?.label || id)
-    .filter(Boolean);
-  if (labels.length === 0) return '請選擇屆別';
-  if (labels.length === 1) return labels[0];
-  if (labels.length === 2) return labels.join('、');
-  return `${labels[0]} 等 ${labels.length} 個屆別`;
+function setupClassSelect() {
+  const select = document.getElementById('classSelect');
+  if (!select) return;
+  select.addEventListener('change', () => handleClassChange(true));
 }
 
 function getSelectedCohortValues() {
-  const container = document.getElementById('cohortOptions');
-  if (!container) return [];
-  return Array.from(container.querySelectorAll('input[type="checkbox"]:checked'))
-    .map(input => input.value)
+  const select = document.getElementById('cohortSelect');
+  if (!select) return [];
+  return Array.from(select.selectedOptions)
+    .map(option => option.value)
     .filter(Boolean);
 }
 
@@ -115,84 +111,137 @@ function handleCohortChange(triggerLoad = true) {
   if (valuesInput) valuesInput.value = selected.join(',');
   const primaryInput = document.getElementById('cohort_primary');
   if (primaryInput) primaryInput.value = selected[0] || '';
-  const labelEl = document.getElementById('cohortLabel');
-  if (labelEl) labelEl.textContent = buildCohortSummary(selected);
-  renderCohortTags(selected);
   if (triggerLoad) {
-    loadTeamList(selected);
+    loadTeamList(selected, getSelectedClassValues());
   }
 }
 
 function setSelectedCohorts(values, triggerLoad = true) {
-  const container = document.getElementById('cohortOptions');
-  if (!container) return;
+  const select = document.getElementById('cohortSelect');
+  if (!select) return;
   const arr = Array.isArray(values) ? values.map(String) : (values ? [String(values)] : []);
-  container.querySelectorAll('input[type="checkbox"]').forEach(input => {
-    input.checked = arr.includes(input.value);
+  Array.from(select.options).forEach(option => {
+    option.selected = arr.includes(option.value);
   });
   handleCohortChange(triggerLoad);
 }
 
-function renderCohortTags(ids) {
-  const tagsEl = document.getElementById('cohortTags');
-  if (!tagsEl) return;
-  tagsEl.innerHTML = '';
-  if (!ids.length) {
-    tagsEl.innerHTML = '<span class="text-muted small">尚未選擇屆別</span>';
-    return;
-  }
-  ids.slice(0, 3).forEach(id => {
-    const tag = document.createElement('span');
-    tag.className = 'cohort-tag';
-    tag.innerHTML = `${cohortMap[id]?.label || id}<span class="remove" data-id="${id}">&times;</span>`;
-    tagsEl.appendChild(tag);
-  });
-  if (ids.length > 3) {
-    const extra = document.createElement('span');
-    extra.className = 'cohort-tag';
-    extra.textContent = `+${ids.length - 3}`;
-    tagsEl.appendChild(extra);
-  }
-  tagsEl.querySelectorAll('.remove').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const id = btn.dataset.id;
-      const checkbox = document.querySelector(`#cohortOptions input[value="${id}"]`);
-      if (checkbox) {
-        checkbox.checked = false;
-        handleCohortChange(true);
-      }
-    });
-  });
-}
-
 function renderCohortOptions(list) {
-  const container = document.getElementById('cohortOptions');
-  if (!container) return;
-  cohortMap = {};
+  const select = document.getElementById('cohortSelect');
+  if (!select) return;
 
   if (!Array.isArray(list) || !list.length) {
-    container.innerHTML = '<div class="text-muted small px-3 py-2">尚無可選屆別</div>';
+    select.innerHTML = '<option value="">尚無可選屆別</option>';
+    select.disabled = true;
     handleCohortChange(false);
     return;
   }
 
-  container.innerHTML = '';
+  select.disabled = false;
+  select.innerHTML = '';
   list.forEach(c => {
     const labelText = `${c.cohort_name} (${c.year_label})`;
-    cohortMap[String(c.cohort_ID)] = { label: labelText };
+    const option = document.createElement('option');
+    option.value = c.cohort_ID;
+    option.textContent = labelText;
+    select.appendChild(option);
+  });
+}
 
-    const label = document.createElement('label');
-    label.className = 'form-check cohort-option';
-    label.innerHTML = `
-      <input type="checkbox" class="form-check-input" value="${c.cohort_ID}">
-      <span class="form-check-label">${labelText}</span>
-    `;
-    container.appendChild(label);
+function handleClassChange(triggerLoad = true) {
+  const selected = getSelectedClassValues();
+  const primaryInput = document.getElementById('class_primary');
+  if (primaryInput) primaryInput.value = selected[0] || '';
+  if (triggerLoad) {
+    loadTeamList(getSelectedCohortValues(), selected);
+  }
+}
+
+function renderClassOptions(list) {
+  const select = document.getElementById('classSelect');
+  if (!select) return;
+
+  select.innerHTML = '';
+  if (!Array.isArray(list) || !list.length) {
+    const noDataOption = document.createElement('option');
+    noDataOption.value = '';
+    noDataOption.textContent = '尚無班級資料';
+    select.appendChild(noDataOption);
+    select.disabled = true;
+    pendingClassValue = '';
+    return;
+  }
+
+  select.disabled = false;
+  list.forEach(cls => {
+    const option = document.createElement('option');
+    option.value = cls.c_ID || cls.class_ID || '';
+    option.textContent = cls.c_name || cls.class_name || '';
+    select.appendChild(option);
   });
 
-  container.querySelectorAll('input[type="checkbox"]').forEach(input => {
-    input.addEventListener('change', () => handleCohortChange(true));
+  if (pendingClassValue) {
+    const hasPending = Array.from(select.options).some(opt => opt.value === pendingClassValue);
+    if (hasPending) {
+      setClassSelections([pendingClassValue], false);
+      pendingClassValue = '';
+    }
+  }
+}
+
+function loadClassList() {
+  const apiUrl = resolveCheckReviewPeriodsApiUrl();
+  fetch(`${apiUrl}?class_list=1`)
+    .then(r => r.json())
+    .then(list => {
+      renderClassOptions(list);
+    })
+    .catch(err => {
+      console.error('載入班級失敗:', err);
+      const select = document.getElementById('classSelect');
+      if (select) {
+        select.innerHTML = '<option value="">班級載入失敗</option>';
+        select.disabled = true;
+      }
+    });
+}
+
+function setClassSelections(values, triggerLoad = false) {
+  const select = document.getElementById('classSelect');
+  const arr = Array.isArray(values)
+    ? values.map(String).filter(Boolean)
+    : (values ? [String(values)] : []);
+  const primaryInput = document.getElementById('class_primary');
+  if (primaryInput) primaryInput.value = arr[0] || '';
+  if (!select) {
+    pendingClassValue = arr[0] || '';
+    return;
+  }
+  Array.from(select.options).forEach(option => {
+    option.selected = arr.includes(option.value);
   });
+  if (triggerLoad) {
+    loadTeamList(getSelectedCohortValues(), arr);
+  }
+}
+
+function getSelectedClassValues() {
+  const select = document.getElementById('classSelect');
+  if (!select) return [];
+  return Array.from(select.selectedOptions)
+    .map(option => option.value)
+    .filter(Boolean);
+}
+
+function parseTeamIdList(raw) {
+  if (!raw || raw === 'ALL') return [];
+  if (Array.isArray(raw)) {
+    return raw.map(String).filter(Boolean);
+  }
+  return String(raw)
+    .split(',')
+    .map(s => s.trim())
+    .filter(Boolean);
 }
 
 /* 載入屆別 */
@@ -212,39 +261,72 @@ function loadCohortList() {
       })
       .catch(err => {
           console.error('載入屆別失敗:', err);
-          const container = document.getElementById("cohortOptions");
-          if (container) container.innerHTML = '<div class="text-danger small px-3 py-2">屆別載入失敗</div>';
+          const select = document.getElementById('cohortSelect');
+          if (select) {
+            select.innerHTML = '<option value="">屆別載入失敗</option>';
+            select.disabled = true;
+          }
       });
 }
 
-/* 載入團隊：依屆別 */
-function loadTeamList(cohortId, preselectTeamId) {
-  const sel = document.getElementById('team_ID');
-  if (!sel) return;
+/* 載入團隊：依屆別/班級 */
+function loadTeamList(cohortId, classId, preselectTeamId) {
   const ids = Array.isArray(cohortId)
     ? cohortId.filter(Boolean)
     : (cohortId ? [cohortId] : []);
+  const classIds = Array.isArray(classId)
+    ? classId.filter(Boolean)
+    : (classId ? [classId] : []);
+  const desiredSelection = preselectTeamId === undefined
+    ? null
+    : parseTeamIdList(preselectTeamId);
   if (!ids.length) {
-    sel.innerHTML = '<option value="">請先選擇屆別</option>';
+    teamPickerState.list = [];
+    teamPickerState.summaryMessage = '請先選擇屆別';
+    setTeamSelections([], { keepMessage: true });
+    updateTeamSummaryDisplay();
     return;
   }
   const apiUrl = resolveCheckReviewPeriodsApiUrl();
-  fetch(`${apiUrl}?team_list=1&cohort_id=${encodeURIComponent(ids.join(','))}`)
+  const params = new URLSearchParams();
+  params.set('team_list', '1');
+  params.set('cohort_id', ids.join(','));
+  if (classIds.length) {
+    params.set('class_id', classIds.join(','));
+  }
+  teamPickerState.summaryMessage = '載入團隊中...';
+  updateTeamSummaryDisplay();
+  fetch(`${apiUrl}?${params.toString()}`)
     .then(r => r.json())
     .then(list => {
-      // 先加入「全部」選項
-      sel.innerHTML = '<option value="ALL">全部 (ALL)</option>';
-      // 再加入各團隊選項
-      list.forEach(t => {
-        sel.innerHTML += `<option value="${t.team_ID}">${t.team_project_name}</option>`;
-      });
-      if (preselectTeamId) {
-        sel.value = String(preselectTeamId);
+      teamPickerState.list = Array.isArray(list) ? list : [];
+      if (!teamPickerState.list.length) {
+        teamPickerState.summaryMessage = '無符合條件的團隊';
+        setTeamSelections([], { keepMessage: true });
+      } else {
+        let nextSelection = desiredSelection && desiredSelection.length
+          ? desiredSelection
+          : [...teamPickerState.selectedIds];
+        nextSelection = nextSelection.filter(id =>
+          teamPickerState.list.some(t => String(t.team_ID) === id)
+        );
+
+        const resolvedPending = teamPickerState.pendingSelections.filter(id =>
+          teamPickerState.list.some(t => String(t.team_ID) === id)
+        );
+        nextSelection = [...new Set([...nextSelection, ...resolvedPending])];
+
+        setTeamSelections(nextSelection, { keepMessage: false });
       }
+      updateTeamSummaryDisplay();
+      renderTeamModalList();
     })
     .catch(err => {
         console.error('載入團隊失敗:', err);
-        if (sel) sel.innerHTML = '<option value="">載入失敗</option>';
+        teamPickerState.list = [];
+        teamPickerState.summaryMessage = '載入團隊失敗';
+        setTeamSelections([], { keepMessage: true });
+        updateTeamSummaryDisplay();
     });
 }
 
@@ -267,6 +349,7 @@ function setupModeSelector() {
     if (hiddenEl) hiddenEl.value = mode;
     if (hintEl) hintEl.textContent = hint || ' ';
     dropdownInstance?.hide();
+    setTeamPickerEnabled(mode === 'in');
   };
 
   document.querySelectorAll('.mode-option').forEach(btn => {
@@ -278,6 +361,226 @@ function setupModeSelector() {
     document.querySelector(`.mode-option[data-mode="${initialValue}"]`) ||
     document.querySelector('.mode-option');
   applyMode(initialBtn);
+}
+
+function setupTeamPicker() {
+  const trigger = document.getElementById('teamPickerTrigger');
+  const clearBtn = document.getElementById('teamPickerClear');
+  const modal = document.getElementById('teamPickerModal');
+  const closeBtn = document.getElementById('teamPickerClose');
+  const cancelBtn = document.getElementById('teamPickerCancel');
+  const saveBtn = document.getElementById('teamPickerSave');
+
+  if (trigger) {
+    trigger.addEventListener('click', () => openTeamPicker());
+    trigger.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        openTeamPicker();
+      }
+    });
+  }
+  if (clearBtn) {
+    clearBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      setTeamSelections([], { keepMessage: false });
+    });
+  }
+  if (closeBtn) closeBtn.addEventListener('click', closeTeamPicker);
+  if (cancelBtn) cancelBtn.addEventListener('click', closeTeamPicker);
+  if (saveBtn) saveBtn.addEventListener('click', () => {
+    setTeamSelections(teamPickerState.modalSelections);
+    closeTeamPicker();
+  });
+  if (modal) {
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) closeTeamPicker();
+    });
+  }
+  updateTeamSummaryDisplay();
+}
+
+function setTeamPickerEnabled(isEnabled) {
+  teamPickerState.enabled = isEnabled;
+  if (!isEnabled) {
+    setTeamSelections([], { keepMessage: true });
+    teamPickerState.summaryMessage = '僅團隊內互評可指定';
+  } else if (!teamPickerState.list.length) {
+    teamPickerState.summaryMessage = '請先選擇屆別';
+  }
+  updateTeamSummaryDisplay();
+}
+
+function updateTeamSummaryDisplay() {
+  const summary = document.getElementById('teamPickerSummary');
+  const trigger = document.getElementById('teamPickerTrigger');
+  const clearBtn = document.getElementById('teamPickerClear');
+  const tagsEl = document.getElementById('teamPickerTags');
+  if (!summary || !trigger || !clearBtn) return;
+
+  trigger.classList.remove('disabled', 'has-value');
+  clearBtn.style.visibility = 'hidden';
+  if (tagsEl) {
+    tagsEl.innerHTML = '';
+    tagsEl.classList.add('hidden');
+  }
+
+  if (!teamPickerState.enabled) {
+    summary.textContent = '僅團隊內互評可指定';
+    trigger.classList.add('disabled');
+    return;
+  }
+
+  const selectedNames = teamPickerState.selectedIds
+    .map(id => teamPickerState.list.find(t => String(t.team_ID) === id)?.team_project_name)
+    .filter(Boolean);
+
+  if (selectedNames.length) {
+    summary.textContent = '';
+    if (tagsEl) {
+      tagsEl.classList.remove('hidden');
+      selectedNames.forEach((name, idx) => {
+        const chip = document.createElement('span');
+        chip.className = 'team-picker-chip team-picker-chip-small';
+        chip.textContent = name;
+        const remove = document.createElement('span');
+        remove.className = 'remove';
+        remove.textContent = '×';
+        remove.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const selectedId = teamPickerState.selectedIds[idx];
+          setTeamSelections(teamPickerState.selectedIds.filter(id => id !== selectedId));
+        });
+        chip.appendChild(remove);
+        tagsEl.appendChild(chip);
+      });
+    }
+    trigger.classList.add('has-value');
+    clearBtn.style.visibility = 'visible';
+  } else {
+    summary.textContent = teamPickerState.summaryMessage || '[所有團隊]';
+  }
+}
+
+function openTeamPicker() {
+  if (!teamPickerState.enabled) return;
+  const modal = document.getElementById('teamPickerModal');
+  if (!modal) return;
+  if (!teamPickerState.list.length) {
+    teamPickerState.summaryMessage = '請先選擇屆別';
+    updateTeamSummaryDisplay();
+    return;
+  }
+  teamPickerState.modalSelections = [...teamPickerState.selectedIds];
+  renderModalSelectedDisplay();
+  renderTeamModalList();
+  modal.classList.add('show');
+}
+
+function closeTeamPicker() {
+  const modal = document.getElementById('teamPickerModal');
+  if (modal) modal.classList.remove('show');
+}
+
+function renderModalSelectedDisplay() {
+  const container = document.getElementById('teamModalSelected');
+  if (!container) return;
+  container.innerHTML = '';
+  teamPickerState.modalSelections = Array.isArray(teamPickerState.modalSelections)
+    ? teamPickerState.modalSelections
+    : [];
+  if (!teamPickerState.modalSelections.length) {
+    const span = document.createElement('span');
+    span.className = 'text-muted';
+    span.textContent = '未選擇（儲存後等同全部團隊）';
+    container.appendChild(span);
+    return;
+  }
+  teamPickerState.modalSelections.forEach((id) => {
+    const team = teamPickerState.list.find(t => String(t.team_ID) === id);
+    if (!team) return;
+    const chip = document.createElement('span');
+    chip.className = 'team-picker-chip';
+    chip.textContent = team.team_project_name;
+    const remove = document.createElement('span');
+    remove.className = 'remove';
+    remove.textContent = '×';
+    remove.addEventListener('click', () => {
+      teamPickerState.modalSelections = teamPickerState.modalSelections.filter(item => item !== id);
+      renderModalSelectedDisplay();
+      renderTeamModalList();
+    });
+    chip.appendChild(remove);
+    container.appendChild(chip);
+  });
+}
+
+function renderTeamModalList() {
+  const listEl = document.getElementById('teamModalList');
+  const placeholder = document.getElementById('teamModalPlaceholder');
+  if (!listEl || !placeholder) return;
+  teamPickerState.modalSelections = Array.isArray(teamPickerState.modalSelections)
+    ? teamPickerState.modalSelections
+    : [];
+
+  if (!teamPickerState.list.length) {
+    placeholder.style.display = 'block';
+    listEl.innerHTML = '';
+    return;
+  }
+  placeholder.style.display = 'none';
+  listEl.innerHTML = '';
+
+  teamPickerState.list.forEach(team => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'team-chip-option';
+    btn.textContent = team.team_project_name;
+    const idStr = String(team.team_ID);
+    if (teamPickerState.modalSelections.includes(idStr)) {
+      btn.classList.add('selected');
+    }
+    btn.addEventListener('click', () => {
+      if (teamPickerState.modalSelections.includes(idStr)) {
+        teamPickerState.modalSelections = teamPickerState.modalSelections.filter(id => id !== idStr);
+      } else {
+        teamPickerState.modalSelections = [...teamPickerState.modalSelections, idStr];
+      }
+      renderModalSelectedDisplay();
+      renderTeamModalList();
+    });
+    listEl.appendChild(btn);
+  });
+}
+
+function setTeamSelections(values, options = {}) {
+  const hidden = document.getElementById('team_input');
+  const summaryDefault = '[所有團隊]';
+  const arr = Array.isArray(values)
+    ? [...new Set(values.map(String).filter(Boolean))]
+    : (!values || values === 'ALL') ? [] : [String(values)];
+
+  if (hidden) hidden.value = arr.length ? arr.join(',') : 'ALL';
+
+  if (!arr.length) {
+    teamPickerState.selectedIds = [];
+    teamPickerState.pendingSelections = [];
+    if (!options.keepMessage) {
+      teamPickerState.summaryMessage = summaryDefault;
+    }
+    updateTeamSummaryDisplay();
+    return;
+  }
+
+  const available = arr.filter(id => teamPickerState.list.some(t => String(t.team_ID) === id));
+  const missing = arr.filter(id => !available.includes(id));
+
+  teamPickerState.selectedIds = available;
+  teamPickerState.pendingSelections = missing;
+  if (!options.keepMessage) {
+    teamPickerState.summaryMessage = '';
+  }
+  updateTeamSummaryDisplay();
 }
 
 /* 載入資料表 */
@@ -307,8 +610,12 @@ function editRow(row) {
   document.getElementById('period_title').value = row.period_title || '';
   const selectedCohort = row.cohort_ID ? [String(row.cohort_ID)] : [];
   setSelectedCohorts(selectedCohort, false);
+  const selectedClass = row.pe_class_ID ? [String(row.pe_class_ID)] : [];
+  setClassSelections(selectedClass, false);
+  const selectedTeams = parseTeamIdList(row.pe_target_ID);
+  setTeamSelections(selectedTeams, { keepMessage: !selectedTeams.length });
   // 載入對應屆別的團隊，預選現有值
-  loadTeamList(selectedCohort, row.pe_target_ID || '');
+  loadTeamList(selectedCohort, selectedClass, selectedTeams);
   const statusInput = document.getElementById('pe_status');
   if (statusInput) statusInput.value = row.pe_status == 1 ? '1' : '0';
 
@@ -324,7 +631,10 @@ function resetForm() {
   document.getElementById('period_start_d').value = '';
   document.getElementById('period_end_d').value = '';
   document.getElementById('period_title').value = '';
+  setClassSelections([], false);
   setSelectedCohorts([], true);
+  teamPickerState.summaryMessage = '請先選擇屆別';
+  setTeamSelections([], { keepMessage: true });
   const statusInput = document.getElementById('pe_status');
   if (statusInput) statusInput.value = '1';
 }

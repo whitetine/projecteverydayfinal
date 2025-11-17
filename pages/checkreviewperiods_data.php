@@ -13,6 +13,14 @@ function resolvePostedCohortId() {
     return $primary ?: $raw;
 }
 
+function resolvePostedClassId() {
+    $raw = $_POST['pe_class_ID'] ?? null;
+    if (is_array($raw)) {
+        $raw = $raw[0] ?? null;
+    }
+    return ($raw === '' ? null : $raw);
+}
+
 /* 排序 */
 switch ($sort) {
     case 'start':  $orderBy = 'ORDER BY p.period_start_d DESC, p.period_ID DESC'; break;
@@ -27,12 +35,14 @@ if ($_POST['action'] ?? '' === 'create') {
     $hasCohortId = false;
     $hasPeTargetId = false;
     $hasPeRoleId = false;
+    $hasPeClassId = false;
     try {
         $checkStmt = $conn->query("SHOW COLUMNS FROM perioddata");
         $columns = $checkStmt->fetchAll(PDO::FETCH_COLUMN);
         $hasCohortId = in_array('cohort_ID', $columns);
         $hasPeTargetId = in_array('pe_target_ID', $columns);
         $hasPeRoleId = in_array('pe_role_ID', $columns);
+        $hasPeClassId = in_array('pe_class_ID', $columns);
     } catch (Exception $e) {
         // 如果檢查失敗，使用預設值
     }
@@ -50,6 +60,11 @@ if ($_POST['action'] ?? '' === 'create') {
     if ($hasCohortId) {
         $fields[] = 'cohort_ID';
         $values[] = resolvePostedCohortId();
+        $placeholders[] = '?';
+    }
+    if ($hasPeClassId) {
+        $fields[] = 'pe_class_ID';
+        $values[] = ($classId = resolvePostedClassId()) !== null ? (int)$classId : null;
         $placeholders[] = '?';
     }
 
@@ -91,11 +106,13 @@ if ($_POST['action'] ?? '' === 'update') {
     // 檢查欄位是否存在
     $hasCohortId = false;
     $hasPeTargetId = false;
+    $hasPeClassId = false;
     try {
         $checkStmt = $conn->query("SHOW COLUMNS FROM perioddata");
         $columns = $checkStmt->fetchAll(PDO::FETCH_COLUMN);
         $hasCohortId = in_array('cohort_ID', $columns);
         $hasPeTargetId = in_array('pe_target_ID', $columns);
+        $hasPeClassId = in_array('pe_class_ID', $columns);
     } catch (Exception $e) {
         // 如果檢查失敗，使用預設值
     }
@@ -119,6 +136,10 @@ if ($_POST['action'] ?? '' === 'update') {
     if ($hasCohortId) {
         $sets[] = 'cohort_ID=?';
         $values[] = resolvePostedCohortId();
+    }
+    if ($hasPeClassId) {
+        $sets[] = 'pe_class_ID=?';
+        $values[] = ($classId = resolvePostedClassId()) !== null ? (int)$classId : null;
     }
 
     $sets[] = 'pe_status=?';
@@ -146,6 +167,26 @@ if ($_POST['action'] ?? '' === 'delete') {
     $stmt->execute([$_POST['period_ID']]);
     header("Location: checkreviewperiods.php?sort=$sort");
     exit;
+}
+
+/* 取得班級 */
+if (isset($_GET['class_list'])) {
+
+  ob_clean();
+  header('Content-Type: application/json; charset=utf-8');
+
+  try {
+      $stmt = $conn->prepare("
+          SELECT c_ID, c_name
+          FROM classdata
+          ORDER BY c_ID ASC
+      ");
+      $stmt->execute();
+      echo json_encode($stmt->fetchAll(PDO::FETCH_ASSOC), JSON_UNESCAPED_UNICODE);
+  } catch (Exception $e) {
+      echo json_encode([], JSON_UNESCAPED_UNICODE);
+  }
+  exit;
 }
 
 /* 取得屆別 */
@@ -194,15 +235,37 @@ if (isset($_GET['team_list'])) {
       exit;
   }
 
-  $placeholders = implode(',', array_fill(0, count($ids), '?'));
-  $stmt = $conn->prepare("
+  $classParam = $_GET['class_id'] ?? '';
+  $classIds = array_filter(array_map('intval', explode(',', $classParam)), function($v) {
+      return $v > 0;
+  });
+
+  $hasClassColumn = false;
+  try {
+      $colStmt = $conn->query("SHOW COLUMNS FROM teamdata LIKE 'class_ID'");
+      $hasClassColumn = $colStmt->rowCount() > 0;
+  } catch (Exception $e) {
+      $hasClassColumn = false;
+  }
+
+  $sql = "
       SELECT team_ID, team_project_name
       FROM teamdata
-      WHERE cohort_ID IN ($placeholders)
-        AND team_status = 1
-      ORDER BY team_project_name ASC
-  ");
-  $stmt->execute($ids);
+      WHERE team_status = 1
+        AND cohort_ID IN (%s)
+  ";
+  $placeholders = implode(',', array_fill(0, count($ids), '?'));
+  $params = $ids;
+
+  if ($hasClassColumn && !empty($classIds)) {
+      $classPlaceholders = implode(',', array_fill(0, count($classIds), '?'));
+      $sql .= " AND class_ID IN ($classPlaceholders)";
+      $params = array_merge($params, $classIds);
+  }
+
+  $sql .= " ORDER BY team_project_name ASC";
+  $stmt = $conn->prepare(sprintf($sql, $placeholders));
+  $stmt->execute($params);
 
   echo json_encode($stmt->fetchAll(PDO::FETCH_ASSOC), JSON_UNESCAPED_UNICODE);
   exit;
@@ -302,10 +365,17 @@ foreach ($tmp as $r) $rankByCreated[$r['period_ID']] = $i++;
       <td><?= htmlspecialchars($r['period_start_d'] ?? '') ?></td>
       <td><?= htmlspecialchars($r['period_end_d'] ?? '') ?></td>
       <td><?= htmlspecialchars($r['period_title'] ?? '') ?></td>
-      <td><?= 
-        ($r['pe_target_ID'] ?? '') === 'ALL' ? '全部 (ALL)' : 
-        (($r['team_project_name'] ?? '') ? htmlspecialchars($r['team_project_name']) : 
-        (($r['pe_target_ID'] ?? '') ? htmlspecialchars($r['pe_target_ID']) : '－'))
+      <td><?php
+        $targetRaw = $r['pe_target_ID'] ?? '';
+        if ($targetRaw === 'ALL' || $targetRaw === '' || $targetRaw === null) {
+          echo $targetRaw === 'ALL' ? '全部 (ALL)' : '－';
+        } elseif (strpos($targetRaw, ',') !== false) {
+          echo '多個團隊';
+        } elseif (!empty($r['team_project_name'])) {
+          echo htmlspecialchars($r['team_project_name']);
+        } else {
+          echo htmlspecialchars($targetRaw);
+        }
       ?></td>
       <td><?= 
         ($r['cohort_name'] ?? '') ? 

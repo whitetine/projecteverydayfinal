@@ -50,30 +50,33 @@ $sort = $_GET['sort'] ?? 'created';
           <input type="text" class="form-control" name="period_title" id="period_title" required>
         </div>
 
-        <!-- 屆別：自訂多選 -->
-        <div class="col-md-3">
+        <div class="col-md-4">
           <label class="form-label">屆別</label>
-          <div class="cohort-dropdown" id="cohortDropdown">
-            <button type="button" class="btn btn-outline-secondary cohort-btn w-100" id="cohortBtn">
-              <span id="cohortLabel">請選擇屆別</span>
-              <span class="chevron">&#9662;</span>
-            </button>
-            <div class="cohort-menu" id="cohortMenu">
-              <div class="cohort-options" id="cohortOptions">
-                <div class="text-muted small px-3 py-2">載入中...</div>
-              </div>
-            </div>
-          </div>
-          <div class="cohort-tags" id="cohortTags"></div>
-          <small class="text-muted d-block mt-1">可多選，優先使用第一個屆別建立時段。</small>
+          <select class="form-select multi-select-list" id="cohortSelect" multiple size="6" aria-label="屆別多選">
+            <option value="">載入中...</option>
+          </select>
+          <small class="text-muted d-block mt-1">可多選，按住 Ctrl/Cmd 鍵；優先使用第一個屆別建立時段。</small>
           <input type="hidden" name="cohort_values" id="cohort_values" value="">
           <input type="hidden" name="cohort_primary" id="cohort_primary" value="">
         </div>
-        <div class="col-md-3">
-          <label class="form-label">指定團隊</label>
-          <select class="form-select" name="pe_target_ID" id="team_ID" required>
-            <option value="">請先選擇屆別</option>
+        <div class="col-md-4">
+          <label class="form-label">班級</label>
+          <select class="form-select multi-select-list" id="classSelect" multiple size="6" aria-label="班級多選">
+            <option value="">載入中...</option>
           </select>
+          <small class="text-muted d-block mt-1">可多選，按住 Ctrl/Cmd 鍵；未選表示全部班級。</small>
+          <input type="hidden" name="pe_class_ID" id="class_primary" value="">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">指定團隊</label>
+          <div class="team-picker-input" id="teamPickerTrigger" role="button" tabindex="0" aria-label="指定團隊挑選">
+            <div class="team-picker-content">
+              <span id="teamPickerSummary" class="placeholder">請先選擇屆別</span>
+              <div class="team-picker-tags" id="teamPickerTags"></div>
+            </div>
+            <button type="button" class="clear-btn" id="teamPickerClear" aria-label="清除指定團隊">&times;</button>
+          </div>
+          <input type="hidden" name="pe_target_ID" id="team_input" value="ALL">
         </div>
 
         <input type="hidden" name="pe_status" id="pe_status" value="1">
@@ -89,6 +92,24 @@ $sort = $_GET['sort'] ?? 'created';
   <!-- 資料表 -->
   <div id="periodTable"></div>
 </div>
+<!-- 指定團隊選擇 Modal -->
+<div class="team-picker-modal" id="teamPickerModal" aria-hidden="true">
+  <div class="team-picker-dialog">
+    <div class="team-picker-header">
+      <div class="selected-display" id="teamModalSelected"></div>
+      <button type="button" class="btn-close" id="teamPickerClose" aria-label="關閉">×</button>
+    </div>
+    <div class="team-picker-body">
+      <div class="team-modal-placeholder" id="teamModalPlaceholder">請先選擇屆別與班級</div>
+      <div class="team-chip-grid" id="teamModalList"></div>
+    </div>
+    <div class="team-picker-footer">
+      <button type="button" class="btn btn-outline-secondary" id="teamPickerCancel">取消</button>
+      <button type="button" class="btn btn-primary" id="teamPickerSave">儲存</button>
+    </div>
+  </div>
+</div>
+
 <link rel="stylesheet" href="css/checkreviewperiods.css">
 <script src="js/checkreviewperiods.js"></script>
 
