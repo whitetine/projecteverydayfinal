@@ -111,6 +111,21 @@
                           
                           const data = await response.json();
                           if (data.ok) {
+                              // 在移除前先計算剩餘數量
+                              const currentItems = listEl.querySelectorAll('.notification-item');
+                              const remainingCount = Math.max(0, currentItems.length - 1);
+                              
+                              // 立即更新通知數量badge（在動畫開始前）
+                              const badgeEl = document.getElementById('notificationCount');
+                              if (badgeEl) {
+                                  if (remainingCount > 0) {
+                                      badgeEl.textContent = remainingCount;
+                                      badgeEl.style.display = 'flex';
+                                  } else {
+                                      badgeEl.style.display = 'none';
+                                  }
+                              }
+                              
                               // 添加淡出動畫
                               this.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
                               this.style.opacity = '0';
@@ -120,15 +135,32 @@
                               setTimeout(() => {
                                   this.remove();
                                   
-                                  // 如果沒有通知了，顯示空狀態
-                                  const remainingItems = listEl.querySelectorAll('.notification-item');
-                                  if (remainingItems.length === 0) {
-                                      listEl.innerHTML = '<p class="text-muted text-center">目前沒有通知</p>';
+                                  // 再次檢查剩餘數量（確保DOM已更新）
+                                  const finalItems = listEl.querySelectorAll('.notification-item');
+                                  const finalCount = finalItems.length;
+                                  
+                                  // 最終更新通知數量badge
+                                  if (badgeEl) {
+                                      if (finalCount > 0) {
+                                          badgeEl.textContent = finalCount;
+                                          badgeEl.style.display = 'flex';
+                                      } else {
+                                          badgeEl.style.display = 'none';
+                                          listEl.innerHTML = '<p class="text-muted text-center">目前沒有通知</p>';
+                                      }
                                   }
+                                  
+                                  // 從服務器更新通知數量（確保完全同步）
+                                  updateNotificationCount().then(() => {
+                                      // 確保badge正確顯示或隱藏
+                                      if (badgeEl) {
+                                          const serverCount = parseInt(badgeEl.textContent) || 0;
+                                          if (serverCount === 0) {
+                                              badgeEl.style.display = 'none';
+                                          }
+                                      }
+                                  });
                               }, 300);
-                              
-                              // 更新未讀數量
-                              updateNotificationCount();
                           }
                       } catch (e) {
                           console.error('標記已讀失敗:', e);
@@ -150,7 +182,7 @@
           try {
               const response = await fetch('api.php?do=get_notification_count');
               const data = await response.json();
-              const count = data.count || 0;
+              const count = parseInt(data.count) || 0;
               
               const badgeEl = document.getElementById('notificationCount');
               if (badgeEl) {
@@ -158,9 +190,11 @@
                       badgeEl.textContent = count;
                       badgeEl.style.display = 'flex';
                   } else {
+                      badgeEl.textContent = '0';
                       badgeEl.style.display = 'none';
                   }
               }
+              return count;
           } catch (error) {
               console.error('更新通知數量失敗:', error);
               // 如果API失敗，隱藏badge
@@ -168,6 +202,7 @@
               if (badgeEl) {
                   badgeEl.style.display = 'none';
               }
+              return 0;
           }
       }
       
