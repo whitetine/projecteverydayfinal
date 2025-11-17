@@ -3,18 +3,31 @@ session_start();
 $sort = $_GET['sort'] ?? 'created';  
 ?>
 
-  <h3 class="mb-3">評分時段管理</h3>
+<h3 class="mb-3">評分時段管理</h3>
 
-  <!-- 排序 -->
-  <form method="get" class="mb-3">
-    <label class="form-label">排序條件：</label>
-    <select name="sort" onchange="this.form.submit()" class="form-select d-inline w-auto">
-      <option value="created" <?= $sort==='created'?'selected':'' ?>>建立時間(預設)</option>
-      <option value="start"   <?= $sort==='start'  ?'selected':'' ?>>開始日</option>
-      <option value="end"     <?= $sort==='end'    ?'selected':'' ?>>結束日</option>
-      <option value="active"  <?= $sort==='active' ?'selected':'' ?>>啟用狀態</option>
-    </select>
-  </form>
+<!-- 模式選擇 -->
+<div class="d-flex align-items-center gap-3 flex-wrap mb-3">
+  <label class="form-label mb-0">模式：</label>
+    <div class="dropdown">
+    <button class="btn btn-primary dropdown-toggle" type="button" id="modeDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+      <span id="modeLabel">請選擇模式</span>
+      </button>
+      <ul class="dropdown-menu" aria-labelledby="modeDropdown">
+      <li>
+        <button class="dropdown-item mode-option" type="button" data-mode="in" data-hint="同一團隊成員彼此互評，適合隊內檢視。">
+          團隊內互評
+        </button>
+      </li>
+      <li>
+        <button class="dropdown-item mode-option" type="button" data-mode="cross" data-hint="不同團隊之間互評，適合跨隊交流與評比。">
+          團隊間互評
+        </button>
+      </li>
+      </ul>
+    </div>
+  <input type="hidden" id="mode_value" value="in">
+  <small class="text-muted" id="modeHint">請選擇模式以查看說明</small>
+  </div>
 
   <!-- 表單 -->
   <div class="card mb-4">
@@ -26,23 +39,35 @@ $sort = $_GET['sort'] ?? 'created';
 
         <div class="col-md-3">
           <label class="form-label">開始日</label>
-          <input type="date" class="form-control" name="period_start_d" id="period_start_d" required>
+          <input type="datetime-local" class="form-control" name="period_start_d" id="period_start_d" required>
         </div>
         <div class="col-md-3">
           <label class="form-label">結束日</label>
-          <input type="date" class="form-control" name="period_end_d" id="period_end_d" required>
+          <input type="datetime-local" class="form-control" name="period_end_d" id="period_end_d" required>
         </div>
         <div class="col-md-3">
           <label class="form-label">標題</label>
           <input type="text" class="form-control" name="period_title" id="period_title" required>
         </div>
 
-        <!-- 屆別：由後端 AJAX 載入 -->
+        <!-- 屆別：自訂多選 -->
         <div class="col-md-3">
           <label class="form-label">屆別</label>
-          <select class="form-select" name="cohort_ID" id="cohort_ID" required>
-            <option value="">載入中...</option>
-          </select>
+          <div class="cohort-dropdown" id="cohortDropdown">
+            <button type="button" class="btn btn-outline-secondary cohort-btn w-100" id="cohortBtn">
+              <span id="cohortLabel">請選擇屆別</span>
+              <span class="chevron">&#9662;</span>
+            </button>
+            <div class="cohort-menu" id="cohortMenu">
+              <div class="cohort-options" id="cohortOptions">
+                <div class="text-muted small px-3 py-2">載入中...</div>
+              </div>
+            </div>
+          </div>
+          <div class="cohort-tags" id="cohortTags"></div>
+          <small class="text-muted d-block mt-1">可多選，優先使用第一個屆別建立時段。</small>
+          <input type="hidden" name="cohort_values" id="cohort_values" value="">
+          <input type="hidden" name="cohort_primary" id="cohort_primary" value="">
         </div>
         <div class="col-md-3">
           <label class="form-label">指定團隊</label>
@@ -51,12 +76,7 @@ $sort = $_GET['sort'] ?? 'created';
           </select>
         </div>
 
-        <div class="col-md-2 d-flex align-items-end">
-          <!-- 真正的欄位：用於送出表單 -->
-          <input class="form-check-input d-none" type="checkbox" name="pe_status" id="pe_status">
-          <!-- UI 切換按鈕 -->
-          <button type="button" id="pe_status_btn" class="btn btn-danger">停用</button>
-        </div>
+        <input type="hidden" name="pe_status" id="pe_status" value="1">
 
         <div class="col-12">
           <button class="btn btn-primary" type="submit" id="submitBtn">新增</button>

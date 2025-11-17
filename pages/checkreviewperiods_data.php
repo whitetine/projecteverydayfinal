@@ -4,6 +4,15 @@ require '../includes/pdo.php';
 
 $sort = $_REQUEST['sort'] ?? 'created';
 
+function resolvePostedCohortId() {
+    $primary = $_POST['cohort_primary'] ?? null;
+    $raw = $_POST['cohort_ID'] ?? null;
+    if (is_array($raw)) {
+        $raw = $raw[0] ?? null;
+    }
+    return $primary ?: $raw;
+}
+
 /* 排序 */
 switch ($sort) {
     case 'start':  $orderBy = 'ORDER BY p.period_start_d DESC, p.period_ID DESC'; break;
@@ -40,7 +49,7 @@ if ($_POST['action'] ?? '' === 'create') {
     }
     if ($hasCohortId) {
         $fields[] = 'cohort_ID';
-        $values[] = $_POST['cohort_ID'] ?? null;
+        $values[] = resolvePostedCohortId();
         $placeholders[] = '?';
     }
 
@@ -109,7 +118,7 @@ if ($_POST['action'] ?? '' === 'update') {
     }
     if ($hasCohortId) {
         $sets[] = 'cohort_ID=?';
-        $values[] = $_POST['cohort_ID'] ?? null;
+        $values[] = resolvePostedCohortId();
     }
 
     $sets[] = 'pe_status=?';
@@ -176,14 +185,24 @@ if (isset($_GET['team_list'])) {
       exit;
   }
 
+  $ids = array_filter(array_map('intval', explode(',', $cohortId)), function($v) {
+      return $v > 0;
+  });
+
+  if (empty($ids)) {
+      echo json_encode([]);
+      exit;
+  }
+
+  $placeholders = implode(',', array_fill(0, count($ids), '?'));
   $stmt = $conn->prepare("
       SELECT team_ID, team_project_name
       FROM teamdata
-      WHERE cohort_ID = ?
+      WHERE cohort_ID IN ($placeholders)
         AND team_status = 1
       ORDER BY team_project_name ASC
   ");
-  $stmt->execute([$cohortId]);
+  $stmt->execute($ids);
 
   echo json_encode($stmt->fetchAll(PDO::FETCH_ASSOC), JSON_UNESCAPED_UNICODE);
   exit;

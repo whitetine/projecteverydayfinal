@@ -7,6 +7,8 @@ function resolveCheckReviewPeriodsApiUrl() {
   return 'pages/checkreviewperiods_data.php';
 }
 
+let cohortMap = {};
+
 function __initCheckReviewPeriods() {
   // 動態設定表單 action
   const form = document.getElementById('periodForm');
@@ -61,14 +63,136 @@ function __initCheckReviewPeriods() {
     });
   }
   
+  try { setupCohortDropdown(); } catch (e) { console.error(e); }
   try { loadCohortList(); } catch (e) { console.error(e); }
   try { loadPeriodTable(); } catch (e) { console.error(e); }
-  try { setupPeStatusButton(); } catch (e) { console.error(e); }
+  try { setupModeSelector(); } catch (e) { console.error(e); }
 }
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', __initCheckReviewPeriods);
 } else {
   __initCheckReviewPeriods();
+}
+
+function setupCohortDropdown() {
+  const btn = document.getElementById('cohortBtn');
+  const menu = document.getElementById('cohortMenu');
+  if (!btn || !menu) return;
+
+  btn.addEventListener('click', (e) => {
+    e.preventDefault();
+    menu.classList.toggle('show');
+  });
+
+  document.addEventListener('click', (e) => {
+    if (!menu.contains(e.target) && !btn.contains(e.target)) {
+      menu.classList.remove('show');
+    }
+  });
+}
+
+function buildCohortSummary(ids) {
+  const labels = ids
+    .map(id => cohortMap[id]?.label || id)
+    .filter(Boolean);
+  if (labels.length === 0) return '請選擇屆別';
+  if (labels.length === 1) return labels[0];
+  if (labels.length === 2) return labels.join('、');
+  return `${labels[0]} 等 ${labels.length} 個屆別`;
+}
+
+function getSelectedCohortValues() {
+  const container = document.getElementById('cohortOptions');
+  if (!container) return [];
+  return Array.from(container.querySelectorAll('input[type="checkbox"]:checked'))
+    .map(input => input.value)
+    .filter(Boolean);
+}
+
+function handleCohortChange(triggerLoad = true) {
+  const selected = getSelectedCohortValues();
+  const valuesInput = document.getElementById('cohort_values');
+  if (valuesInput) valuesInput.value = selected.join(',');
+  const primaryInput = document.getElementById('cohort_primary');
+  if (primaryInput) primaryInput.value = selected[0] || '';
+  const labelEl = document.getElementById('cohortLabel');
+  if (labelEl) labelEl.textContent = buildCohortSummary(selected);
+  renderCohortTags(selected);
+  if (triggerLoad) {
+    loadTeamList(selected);
+  }
+}
+
+function setSelectedCohorts(values, triggerLoad = true) {
+  const container = document.getElementById('cohortOptions');
+  if (!container) return;
+  const arr = Array.isArray(values) ? values.map(String) : (values ? [String(values)] : []);
+  container.querySelectorAll('input[type="checkbox"]').forEach(input => {
+    input.checked = arr.includes(input.value);
+  });
+  handleCohortChange(triggerLoad);
+}
+
+function renderCohortTags(ids) {
+  const tagsEl = document.getElementById('cohortTags');
+  if (!tagsEl) return;
+  tagsEl.innerHTML = '';
+  if (!ids.length) {
+    tagsEl.innerHTML = '<span class="text-muted small">尚未選擇屆別</span>';
+    return;
+  }
+  ids.slice(0, 3).forEach(id => {
+    const tag = document.createElement('span');
+    tag.className = 'cohort-tag';
+    tag.innerHTML = `${cohortMap[id]?.label || id}<span class="remove" data-id="${id}">&times;</span>`;
+    tagsEl.appendChild(tag);
+  });
+  if (ids.length > 3) {
+    const extra = document.createElement('span');
+    extra.className = 'cohort-tag';
+    extra.textContent = `+${ids.length - 3}`;
+    tagsEl.appendChild(extra);
+  }
+  tagsEl.querySelectorAll('.remove').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.id;
+      const checkbox = document.querySelector(`#cohortOptions input[value="${id}"]`);
+      if (checkbox) {
+        checkbox.checked = false;
+        handleCohortChange(true);
+      }
+    });
+  });
+}
+
+function renderCohortOptions(list) {
+  const container = document.getElementById('cohortOptions');
+  if (!container) return;
+  cohortMap = {};
+
+  if (!Array.isArray(list) || !list.length) {
+    container.innerHTML = '<div class="text-muted small px-3 py-2">尚無可選屆別</div>';
+    handleCohortChange(false);
+    return;
+  }
+
+  container.innerHTML = '';
+  list.forEach(c => {
+    const labelText = `${c.cohort_name} (${c.year_label})`;
+    cohortMap[String(c.cohort_ID)] = { label: labelText };
+
+    const label = document.createElement('label');
+    label.className = 'form-check cohort-option';
+    label.innerHTML = `
+      <input type="checkbox" class="form-check-input" value="${c.cohort_ID}">
+      <span class="form-check-label">${labelText}</span>
+    `;
+    container.appendChild(label);
+  });
+
+  container.querySelectorAll('input[type="checkbox"]').forEach(input => {
+    input.addEventListener('change', () => handleCohortChange(true));
+  });
 }
 
 /* 載入屆別 */
@@ -77,36 +201,35 @@ function loadCohortList() {
   fetch(`${apiUrl}?cohort_list=1`)
       .then(r => r.json())
       .then(list => {
-          let sel = document.getElementById("cohort_ID");
-          sel.innerHTML = '<option value="">請選擇屆別</option>';
-          list.forEach(c => {
-              sel.innerHTML += `<option value="${c.cohort_ID}">
-                  ${c.cohort_name} (${c.year_label})
-              </option>`;
-          });
-          // 預設清空團隊
-          loadTeamList('');
-          // 切換屆別時，重新載入團隊清單
-          sel.addEventListener('change', function () {
-            loadTeamList(this.value);
-          });
+          renderCohortOptions(list);
+          const presetValues = (document.getElementById('cohort_values')?.value || '')
+            .split(',')
+            .filter(Boolean);
+          const primary = document.getElementById('cohort_primary')?.value || '';
+          const initial = presetValues.length ? presetValues : (primary ? [primary] : []);
+          setSelectedCohorts(initial, false);
+          handleCohortChange(true);
       })
       .catch(err => {
           console.error('載入屆別失敗:', err);
-          const sel = document.getElementById("cohort_ID");
-          if (sel) sel.innerHTML = '<option value="">載入失敗</option>';
+          const container = document.getElementById("cohortOptions");
+          if (container) container.innerHTML = '<div class="text-danger small px-3 py-2">屆別載入失敗</div>';
       });
 }
 
 /* 載入團隊：依屆別 */
 function loadTeamList(cohortId, preselectTeamId) {
   const sel = document.getElementById('team_ID');
-  if (!cohortId) {
+  if (!sel) return;
+  const ids = Array.isArray(cohortId)
+    ? cohortId.filter(Boolean)
+    : (cohortId ? [cohortId] : []);
+  if (!ids.length) {
     sel.innerHTML = '<option value="">請先選擇屆別</option>';
     return;
   }
   const apiUrl = resolveCheckReviewPeriodsApiUrl();
-  fetch(`${apiUrl}?team_list=1&cohort_id=${encodeURIComponent(cohortId)}`)
+  fetch(`${apiUrl}?team_list=1&cohort_id=${encodeURIComponent(ids.join(','))}`)
     .then(r => r.json())
     .then(list => {
       // 先加入「全部」選項
@@ -125,28 +248,36 @@ function loadTeamList(cohortId, preselectTeamId) {
     });
 }
 
-/* 啟用切換按鈕：同步 checkbox 與 btn 樣式 */
-function setupPeStatusButton() {
-  const cb  = document.getElementById('pe_status');
-  const btn = document.getElementById('pe_status_btn');
-  if (!cb || !btn) return;
+/* 模式選擇 */
+function setupModeSelector() {
+  const labelEl = document.getElementById('modeLabel');
+  const hiddenEl = document.getElementById('mode_value');
+  const dropdownEl = document.getElementById('modeDropdown');
+  const hintEl = document.getElementById('modeHint');
+  const dropdownInstance = (dropdownEl && window.bootstrap)
+    ? bootstrap.Dropdown.getOrCreateInstance(dropdownEl)
+    : null;
 
-  const sync = () => {
-    if (cb.checked) {
-      btn.className = 'btn btn-success';
-      btn.textContent = '啟用';
-    } else {
-      btn.className = 'btn btn-danger';
-      btn.textContent = '停用';
-    }
+  const applyMode = (btn) => {
+    if (!btn) return;
+    const mode = btn.dataset.mode || '';
+    const text = btn.textContent.trim() || '請選擇模式';
+    const hint = btn.dataset.hint || '';
+    if (labelEl) labelEl.textContent = text;
+    if (hiddenEl) hiddenEl.value = mode;
+    if (hintEl) hintEl.textContent = hint || ' ';
+    dropdownInstance?.hide();
   };
 
-  btn.addEventListener('click', () => {
-    cb.checked = !cb.checked;
-    sync();
+  document.querySelectorAll('.mode-option').forEach(btn => {
+    btn.addEventListener('click', () => applyMode(btn));
   });
-  cb.addEventListener('change', sync);
-  sync();
+
+  const initialValue = hiddenEl?.value || 'in';
+  const initialBtn =
+    document.querySelector(`.mode-option[data-mode="${initialValue}"]`) ||
+    document.querySelector('.mode-option');
+  applyMode(initialBtn);
 }
 
 /* 載入資料表 */
@@ -174,12 +305,12 @@ function editRow(row) {
   document.getElementById('period_start_d').value = row.period_start_d || '';
   document.getElementById('period_end_d').value = row.period_end_d || '';
   document.getElementById('period_title').value = row.period_title || '';
-  document.getElementById('cohort_ID').value = row.cohort_ID || '';
+  const selectedCohort = row.cohort_ID ? [String(row.cohort_ID)] : [];
+  setSelectedCohorts(selectedCohort, false);
   // 載入對應屆別的團隊，預選現有值
-  loadTeamList(row.cohort_ID || '', row.pe_target_ID || '');
-  document.getElementById('pe_status').checked = (row.pe_status == 1);
-  // 同步 UI 按鈕
-  document.getElementById('pe_status').dispatchEvent(new Event('change'));
+  loadTeamList(selectedCohort, row.pe_target_ID || '');
+  const statusInput = document.getElementById('pe_status');
+  if (statusInput) statusInput.value = row.pe_status == 1 ? '1' : '0';
 
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
@@ -193,9 +324,7 @@ function resetForm() {
   document.getElementById('period_start_d').value = '';
   document.getElementById('period_end_d').value = '';
   document.getElementById('period_title').value = '';
-  document.getElementById('cohort_ID').value = '';
-  loadTeamList('');
-  document.getElementById('pe_status').checked = false;
-  // 同步 UI 按鈕
-  document.getElementById('pe_status').dispatchEvent(new Event('change'));
+  setSelectedCohorts([], true);
+  const statusInput = document.getElementById('pe_status');
+  if (statusInput) statusInput.value = '1';
 }
