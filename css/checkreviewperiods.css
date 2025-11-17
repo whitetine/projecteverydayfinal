@@ -1,3 +1,22 @@
+.team-picker-input .team-chip .remove {
+  background: rgba(255, 255, 255, 0.7);
+  border-radius: 50%;
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  font-size: .8rem;
+  font-weight: 700;
+  color: #0b3c5d;
+  transition: background .2s ease;
+}
+
+.team-picker-input .team-chip .remove:hover {
+  background: rgba(255, 255, 255, 0.95);
+  color: #ef4444;
+}
 .checkreviewperiods-page {
   max-width: 1200px;
   margin: 0 auto 3rem;
@@ -92,31 +111,31 @@
   display: flex;
   align-items: center;
   width: 100%;
-  min-height: 48px;
-  padding: .35rem .6rem;
+  min-height: 56px;
+  padding: .4rem .6rem;
   border: 1px solid rgba(99, 102, 241, 0.22);
-  border-radius: 12px;
+  border-radius: 14px;
   background: #fff;
-  gap: .35rem;
   flex-wrap: wrap;
+  gap: .45rem;
 }
 
 .team-picker-input .team-chip {
   display: inline-flex;
   align-items: center;
-  gap: .35rem;
-  padding: .2rem .9rem;
-  background: rgba(14, 165, 233, 0.12);
+  gap: .3rem;
+  padding: .15rem .85rem;
+  background: rgba(14, 165, 233, 0.18);
   color: #0b3c5d;
   border-radius: 999px;
   font-weight: 700;
-  font-size: 1rem;
+  font-size: .95rem;
+  box-shadow: 0 3px 8px rgba(15, 23, 42, 0.15);
 }
 
 .team-picker-input .team-chip.placeholder {
-  color: #000000;
-  background: rgba(15, 23, 42, 0.08);
-  font-weight: 600;
+  color: #0b3c5d;
+  background: rgba(148, 163, 184, 0.25);
 }
 
 .team-picker-input .team-chip .remove {
