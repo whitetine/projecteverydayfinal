@@ -65,6 +65,10 @@ if (!$stmt->fetchColumn()) {
         <h1 class="page-title">
             里程碑管理
         </h1>
+        <button class="btn-gantt" @click="showGanttChart">
+            <i class="fa-solid fa-chart-gantt"></i>
+            顯示甘特圖
+        </button>
     </div>
 
     <!-- 篩選區域 -->

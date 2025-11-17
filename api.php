@@ -46,7 +46,7 @@ switch (true) {
 // 里程碑管理
 case in_array($do, ['get_milestones', 'get_requirements', 'get_teams', 'get_requirement_progress',
                     'create_milestone', 'update_milestone', 'delete_milestone', 'approve_milestone',
-                    'get_student_milestones', 'accept_milestone', 'complete_milestone']):
+                    'get_student_milestones', 'accept_milestone', 'complete_milestone', 'get_gantt_data']):
     require __DIR__ . '/modules/milestone.php';
     break;
 

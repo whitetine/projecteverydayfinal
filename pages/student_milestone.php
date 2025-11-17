@@ -76,7 +76,13 @@ if (!$studentTeam) {
     <!-- 進度總覽 -->
     <div class="progress-section">
         <div class="progress-card">
-            <div class="progress-label">總進度</div>
+            <div class="progress-header">
+                <div class="progress-label">總進度</div>
+                <button class="btn-gantt" @click="showGanttChart">
+                    <i class="fa-solid fa-chart-gantt"></i>
+                    顯示甘特圖
+                </button>
+            </div>
             <div class="progress-value">
                 <span class="current">{{ completedCount }}</span>
                 <span class="separator">/</span>

@@ -369,6 +369,11 @@ if (!window._studentMilestoneAppInitialized) {
                         hour: '2-digit',
                         minute: '2-digit'
                     });
+                },
+                
+                // 顯示甘特圖
+                showGanttChart() {
+                    window.location.hash = '#pages/gantt_chart.php';
                 }
             }
         });

@@ -324,6 +324,11 @@ if (!window._milestoneAppInitialized) {
                     }
                 },
 
+                // 顯示甘特圖
+                showGanttChart() {
+                    window.location.hash = '#pages/gantt_chart.php';
+                },
+                
                 // 關閉 Modal
                 closeModal() {
                     this.showCreateModal = false;

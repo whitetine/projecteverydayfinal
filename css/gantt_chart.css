@@ -1,0 +1,300 @@
+/* 甘特圖頁面樣式 */
+
+.gantt-container {
+    padding: 2rem;
+    background: linear-gradient(to bottom, #f8fafc 0%, #e2e8f0 100%);
+    min-height: 100vh;
+}
+
+.gantt-header {
+    background: white;
+    padding: 1.5rem 2rem;
+    border-radius: 16px;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    margin-bottom: 2rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+.gantt-title {
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: #1e293b;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.gantt-title i {
+    color: #667eea;
+}
+
+.gantt-controls {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+}
+
+.team-select {
+    padding: 0.5rem 1rem;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    font-size: 0.95rem;
+    background: white;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.team-select:hover {
+    border-color: #667eea;
+}
+
+.btn-back {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    background: #64748b;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.btn-back:hover {
+    background: #475569;
+    transform: translateY(-2px);
+}
+
+.gantt-content {
+    background: white;
+    padding: 2rem;
+    border-radius: 16px;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    overflow-x: auto;
+}
+
+.gantt-chart {
+    min-width: 800px;
+}
+
+.gantt-timeline {
+    display: flex;
+    flex-direction: column;
+}
+
+.gantt-row {
+    display: flex;
+    min-height: 80px;
+    border-bottom: 1px solid #e2e8f0;
+    align-items: center;
+}
+
+.gantt-header-row {
+    background: #f8fafc;
+    font-weight: 600;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    border-bottom: 2px solid #cbd5e1;
+}
+
+.gantt-task-name {
+    width: 250px;
+    min-width: 250px;
+    padding: 1rem;
+    border-right: 1px solid #e2e8f0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.task-title {
+    font-weight: 600;
+    color: #1e293b;
+    font-size: 0.95rem;
+}
+
+.task-meta {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.task-status,
+.task-priority {
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+
+.task-status.not-started {
+    background: #f1f5f9;
+    color: #475569;
+}
+
+.task-status.in-progress {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.task-status.rejected {
+    background: #fee2e2;
+    color: #b91c1c;
+}
+
+.task-status.completed {
+    background: #d1fae5;
+    color: #065f46;
+}
+
+.task-status.review {
+    background: #dbeafe;
+    color: #1e40af;
+}
+
+.task-priority.normal {
+    background: #e2e8f0;
+    color: #475569;
+}
+
+.task-priority.important {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.task-priority.urgent {
+    background: #fed7aa;
+    color: #c2410c;
+}
+
+.task-priority.super-urgent {
+    background: #fee2e2;
+    color: #b91c1c;
+}
+
+.gantt-bars-container {
+    flex: 1;
+    position: relative;
+    height: 100%;
+    min-height: 80px;
+}
+
+.gantt-time-scale {
+    display: flex;
+    height: 40px;
+    border-bottom: 1px solid #cbd5e1;
+    position: relative;
+}
+
+.gantt-time-marker {
+    flex: 1;
+    text-align: center;
+    font-size: 0.75rem;
+    color: #64748b;
+    padding: 0.5rem 0;
+    border-right: 1px solid #e2e8f0;
+}
+
+.gantt-bar-wrapper {
+    position: relative;
+    height: 60px;
+    margin-top: 10px;
+}
+
+.gantt-bar {
+    position: absolute;
+    height: 40px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    padding: 0 0.75rem;
+    color: white;
+    font-size: 0.85rem;
+    font-weight: 500;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    transition: all 0.3s ease;
+    cursor: pointer;
+    overflow: hidden;
+}
+
+.gantt-bar:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+    z-index: 5;
+}
+
+.gantt-bar.not-started {
+    background: linear-gradient(135deg, #94a3b8 0%, #64748b 100%);
+}
+
+.gantt-bar.in-progress {
+    background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+}
+
+.gantt-bar.rejected {
+    background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
+}
+
+.gantt-bar.completed {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+}
+
+.gantt-bar.review {
+    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+}
+
+.bar-label {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.empty-state {
+    background: white;
+    padding: 4rem 2rem;
+    border-radius: 16px;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    text-align: center;
+}
+
+.empty-icon {
+    font-size: 4rem;
+    color: #cbd5e1;
+    margin-bottom: 1rem;
+}
+
+.empty-text {
+    font-size: 1.25rem;
+    color: #64748b;
+    margin-bottom: 0.5rem;
+}
+
+.empty-hint {
+    font-size: 0.95rem;
+    color: #94a3b8;
+}
+
+@media (max-width: 768px) {
+    .gantt-container {
+        padding: 1rem;
+    }
+    
+    .gantt-header {
+        padding: 1rem 1.5rem;
+    }
+    
+    .gantt-task-name {
+        width: 200px;
+        min-width: 200px;
+    }
+}
+

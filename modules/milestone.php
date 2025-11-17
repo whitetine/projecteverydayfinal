@@ -863,5 +863,212 @@ switch ($do) {
             json_err('操作失敗：'.$e->getMessage());
         }
         break;
+
+    // 獲取甘特圖資料
+    case 'get_gantt_data':
+        $u_ID = $_SESSION['u_ID'] ?? null;
+        if (!$u_ID) {
+            json_err('請先登入', 'NOT_LOGGED_IN', 401);
+        }
+        
+        $team_ID = isset($_GET['team_ID']) ? (int)$_GET['team_ID'] : 0;
+        
+        try {
+            $milestones = [];
+            $startDate = null;
+            $endDate = null;
+            
+            if ($team_ID > 0) {
+                // 獲取指定團隊的里程碑
+                $stmt = $conn->prepare("
+                    SELECT 
+                        m.ms_ID,
+                        m.ms_title,
+                        m.ms_start_d,
+                        m.ms_end_d,
+                        m.ms_status,
+                        m.ms_priority,
+                        m.ms_created_d,
+                        t.team_project_name as team_name
+                    FROM milesdata m
+                    JOIN teamdata t ON m.team_ID = t.team_ID
+                    WHERE m.team_ID = ? AND t.team_status = 1
+                    ORDER BY COALESCE(m.ms_start_d, m.ms_created_d) ASC, m.ms_created_d ASC
+                ");
+                $stmt->execute([$team_ID]);
+                $milestones = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            } else {
+                // 獲取當前用戶相關的里程碑
+                $role_ID = $_SESSION['role_ID'] ?? null;
+                
+                if ($role_ID == 6) {
+                    // 學生：獲取所屬團隊的里程碑
+                    try {
+                        $stmt = $conn->prepare("
+                            SELECT DISTINCT t.team_ID
+                            FROM teamdata t
+                            JOIN teammember tm ON t.team_ID = tm.team_ID
+                            WHERE tm.team_u_ID = ? AND t.team_status = 1
+                            LIMIT 1
+                        ");
+                        $stmt->execute([$u_ID]);
+                    } catch (Exception $e) {
+                        $stmt = $conn->prepare("
+                            SELECT DISTINCT t.team_ID
+                            FROM teamdata t
+                            JOIN teammember tm ON t.team_ID = tm.team_ID
+                            WHERE tm.u_ID = ? AND t.team_status = 1
+                            LIMIT 1
+                        ");
+                        $stmt->execute([$u_ID]);
+                    }
+                    $team = $stmt->fetch(PDO::FETCH_ASSOC);
+                    
+                    if ($team) {
+                        $stmt = $conn->prepare("
+                            SELECT 
+                                m.ms_ID,
+                                m.ms_title,
+                                m.ms_start_d,
+                                m.ms_end_d,
+                                m.ms_status,
+                                m.ms_priority,
+                                m.ms_created_d,
+                                t.team_project_name as team_name
+                            FROM milesdata m
+                            JOIN teamdata t ON m.team_ID = t.team_ID
+                            WHERE m.team_ID = ? AND t.team_status = 1
+                            ORDER BY COALESCE(m.ms_start_d, m.ms_created_d) ASC, m.ms_created_d ASC
+                        ");
+                        $stmt->execute([$team['team_ID']]);
+                        $milestones = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                    }
+                } elseif ($role_ID == 4) {
+                    // 老師：獲取所有指導的團隊的里程碑
+                    try {
+                        $stmt = $conn->prepare("
+                            SELECT DISTINCT t.team_ID
+                            FROM teamdata t
+                            JOIN teammember tm ON t.team_ID = tm.team_ID
+                            JOIN userrolesdata ur ON ur.ur_u_ID = tm.team_u_ID
+                            WHERE ur.ur_u_ID = ? AND ur.role_ID = 4 AND ur.user_role_status = 1 AND t.team_status = 1
+                        ");
+                        $stmt->execute([$u_ID]);
+                    } catch (Exception $e) {
+                        $stmt = $conn->prepare("
+                            SELECT DISTINCT t.team_ID
+                            FROM teamdata t
+                            JOIN teammember tm ON t.team_ID = tm.team_ID
+                            JOIN userrolesdata ur ON ur.ur_u_ID = tm.u_ID
+                            WHERE ur.ur_u_ID = ? AND ur.role_ID = 4 AND ur.user_role_status = 1 AND t.team_status = 1
+                        ");
+                        $stmt->execute([$u_ID]);
+                    }
+                    $teams = $stmt->fetchAll(PDO::FETCH_COLUMN);
+                    
+                    if (count($teams) > 0) {
+                        $placeholders = implode(',', array_fill(0, count($teams), '?'));
+                        $stmt = $conn->prepare("
+                            SELECT 
+                                m.ms_ID,
+                                m.ms_title,
+                                m.ms_start_d,
+                                m.ms_end_d,
+                                m.ms_status,
+                                m.ms_priority,
+                                m.ms_created_d,
+                                t.team_project_name as team_name
+                            FROM milesdata m
+                            JOIN teamdata t ON m.team_ID = t.team_ID
+                            WHERE m.team_ID IN ($placeholders) AND t.team_status = 1
+                            ORDER BY COALESCE(m.ms_start_d, m.ms_created_d) ASC, m.ms_created_d ASC
+                        ");
+                        $stmt->execute($teams);
+                        $milestones = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                    }
+                }
+            }
+            
+            // 計算日期範圍
+            if (count($milestones) > 0) {
+                $dates = [];
+                foreach ($milestones as $m) {
+                    // 如果沒有開始時間，使用創建時間或結束時間
+                    if (!empty($m['ms_start_d'])) {
+                        try {
+                            $dates[] = new DateTime($m['ms_start_d']);
+                        } catch (Exception $e) {
+                            // 忽略無效日期
+                        }
+                    } elseif (!empty($m['ms_end_d'])) {
+                        // 如果沒有開始時間但有結束時間，使用結束時間作為開始時間
+                        try {
+                            $dates[] = new DateTime($m['ms_end_d']);
+                        } catch (Exception $e) {
+                            // 忽略無效日期
+                        }
+                    }
+                    
+                    if (!empty($m['ms_end_d'])) {
+                        try {
+                            $dates[] = new DateTime($m['ms_end_d']);
+                        } catch (Exception $e) {
+                            // 忽略無效日期
+                        }
+                    } elseif (!empty($m['ms_start_d'])) {
+                        // 如果沒有結束時間但有開始時間，使用開始時間作為結束時間
+                        try {
+                            $dates[] = new DateTime($m['ms_start_d']);
+                        } catch (Exception $e) {
+                            // 忽略無效日期
+                        }
+                    }
+                }
+                
+                if (count($dates) > 0) {
+                    usort($dates, function($a, $b) {
+                        if ($a < $b) return -1;
+                        if ($a > $b) return 1;
+                        return 0;
+                    });
+                    $startDate = $dates[0]->format('Y-m-d');
+                    $endDate = $dates[count($dates) - 1]->format('Y-m-d');
+                    
+                    // 擴展範圍，前後各加7天
+                    try {
+                        $startDateObj = new DateTime($startDate);
+                        $startDateObj->modify('-7 days');
+                        $startDate = $startDateObj->format('Y-m-d');
+                    } catch (Exception $e) {
+                        // 如果失敗，使用原日期
+                    }
+                    
+                    try {
+                        $endDateObj = new DateTime($endDate);
+                        $endDateObj->modify('+7 days');
+                        $endDate = $endDateObj->format('Y-m-d');
+                    } catch (Exception $e) {
+                        // 如果失敗，使用原日期
+                    }
+                } else {
+                    // 如果沒有任何有效日期，使用當前日期範圍
+                    $startDate = date('Y-m-d', strtotime('-30 days'));
+                    $endDate = date('Y-m-d', strtotime('+30 days'));
+                }
+            } else {
+                // 如果沒有里程碑，返回空數組和當前日期範圍
+                $startDate = date('Y-m-d', strtotime('-30 days'));
+                $endDate = date('Y-m-d', strtotime('+30 days'));
+            }
+            
+            json_ok([
+                'milestones' => $milestones,
+                'startDate' => $startDate,
+                'endDate' => $endDate
+            ]);
+        } catch (Throwable $e) {
+            json_err('載入甘特圖資料失敗：'.$e->getMessage());
+        }
+        break;
 }
 
