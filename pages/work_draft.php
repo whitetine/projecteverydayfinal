@@ -1,9 +1,6 @@
 <?php
 session_start();//註解
-if (!isset($_SESSION['u_ID'])) {
-    echo "<script>alert('請先登入');location.href='../index.php';</script>";
-    exit;
-}
+
 
 // 檢查是否為 AJAX 請求（jQuery load 會設定此 header）或 partial 參數
 $isAjax = isset($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest';
@@ -103,5 +100,5 @@ if (!$isPartial && !$isAjax && !$isFromMain) {
   </div>
 </div>
 
-<link rel="stylesheet" href="../css/work-draft.css">
-<script src="../js/work-draft.js"></script>
+<link rel="stylesheet" href="css/work-draft.css">
+<script src="js/work-draft.js"></script>

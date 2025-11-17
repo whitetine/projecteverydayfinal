@@ -514,6 +514,15 @@
     justify-content: center;
     z-index: 2000;
     animation: fadeIn 0.3s ease;
+    overflow-y: auto;
+    box-sizing: border-box;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+    /* 確保在小螢幕上也能完整顯示 */
+    min-height: 100vh;
+    /* 確保上下都有足夠的空間，不會黏住 navbar */
+    /* 使用足夠大的 padding-top 確保 modal 不會黏住 navbar */
+    padding: calc(var(--navbar-height, 56px) + 3rem) 1rem 3rem 1rem;
 }
 
 @keyframes fadeIn {
@@ -528,21 +537,83 @@
 .modal-content {
     background: white;
     border-radius: 8px;
-    width: 95%;
+    width: 100%;
     max-width: 600px;
-    max-height: 90vh;
+    /* 使用 calc 確保不會超出視窗，考慮 navbar 高度和上下 padding */
+    max-height: calc(100vh - var(--navbar-height, 56px) - 4rem);
     overflow-y: auto;
+    overflow-x: hidden;
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
     animation: slideUp 0.3s ease;
-    margin: 1rem;
+    /* 使用 margin auto 確保在 flexbox 中垂直和水平居中 */
+    margin: auto;
     border: 1px solid #e2e8f0;
+    position: relative;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    -webkit-overflow-scrolling: touch;
+    /* 確保在小螢幕上也能完整顯示 */
+    min-height: 0;
+    /* 強制確保在 overlay 中居中，即使內容可滾動 */
+    align-self: center;
+    flex-shrink: 0;
 }
 
 @media (min-width: 576px) {
+    .modal-overlay {
+        /* 確保上下都有足夠空間，不會黏住 navbar */
+        padding: calc(var(--navbar-height, 56px) + 4rem) 2rem 4rem 2rem;
+    }
+    
     .modal-content {
         width: 90%;
+        max-width: 600px;
+        max-height: calc(100vh - var(--navbar-height, 56px) - 8rem);
         border-radius: 20px;
-        margin: 0;
+        margin: auto;
+    }
+}
+
+@media (max-width: 575px) {
+    .modal-overlay {
+        align-items: center;
+        /* 確保上下都有足夠空間，不會黏住 navbar */
+        padding: calc(var(--navbar-height, 56px) + 2.5rem) 0.5rem 2.5rem 0.5rem;
+    }
+    
+    .modal-content {
+        /* 在小螢幕上使用更小的 max-height，確保完整顯示 */
+        max-height: calc(100vh - var(--navbar-height, 56px) - 5rem);
+        width: calc(100% - 1rem);
+        border-radius: 8px;
+        margin: 0 auto;
+    }
+}
+
+/* 針對非常小的螢幕（高度 < 600px）進一步優化 */
+@media (max-height: 600px) {
+    .modal-overlay {
+        align-items: center;
+        /* 即使在小螢幕上也要確保有足夠空間 */
+        padding: calc(var(--navbar-height, 56px) + 1.5rem) 0.5rem 1.5rem 0.5rem;
+    }
+    
+    .modal-content {
+        max-height: calc(100vh - var(--navbar-height, 56px) - 3rem);
+        border-radius: 8px;
+    }
+    
+    .modal-header {
+        padding: 0.75rem 1rem;
+    }
+    
+    .modal-body {
+        padding: 1rem;
+    }
+    
+    .form-group {
+        margin-bottom: 1rem;
     }
 }
 
@@ -563,11 +634,22 @@
     align-items: center;
     padding: 1rem 1.5rem;
     border-bottom: 2px solid #e2e8f0;
+    flex-shrink: 0;
 }
 
 @media (min-width: 768px) {
     .modal-header {
         padding: 1.5rem 2rem;
+    }
+}
+
+@media (max-width: 575px) {
+    .modal-header {
+        padding: 0.875rem 1rem;
+    }
+    
+    .modal-header h3 {
+        font-size: 1.1rem;
     }
 }
 
@@ -598,11 +680,20 @@
 
 .modal-body {
     padding: 1.5rem;
+    overflow-y: auto;
+    flex: 1;
+    min-height: 0;
 }
 
 @media (min-width: 768px) {
     .modal-body {
         padding: 2rem;
+    }
+}
+
+@media (max-width: 575px) {
+    .modal-body {
+        padding: 1rem;
     }
 }
 
@@ -657,6 +748,20 @@
     gap: 0.75rem;
     justify-content: flex-end;
     margin-top: 1.5rem;
+    flex-shrink: 0;
+}
+
+@media (max-width: 575px) {
+    .form-actions {
+        flex-direction: column-reverse;
+        gap: 0.5rem;
+    }
+    
+    .form-actions .btn-cancel,
+    .form-actions .btn-submit {
+        width: 100%;
+        justify-content: center;
+    }
 }
 
 .btn-cancel,
