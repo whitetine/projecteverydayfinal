@@ -69,6 +69,6 @@ $sort = $_GET['sort'] ?? 'created';
   <!-- 資料表 -->
   <div id="periodTable"></div>
 </div>
-<link rel="stylesheet" href="/css/checkreviewperiods.css">
-<script src="/js/checkreviewperiods.js"></script>
+<link rel="stylesheet" href="css/checkreviewperiods.css">
+<script src="js/checkreviewperiods.js"></script>
 

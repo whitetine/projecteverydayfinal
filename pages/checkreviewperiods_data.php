@@ -201,17 +201,54 @@ try {
     $hasCohortId = false;
 }
 
+// 檢查是否有 pe_target_ID 欄位
+$hasPeTargetId = false;
+try {
+    $checkStmt2 = $conn->query("SHOW COLUMNS FROM perioddata LIKE 'pe_target_ID'");
+    $hasPeTargetId = $checkStmt2->rowCount() > 0;
+} catch (Exception $e) {
+    $hasPeTargetId = false;
+}
+
 if ($hasCohortId) {
     // 如果有 cohort_ID 欄位，使用 JOIN
-    $sql = "SELECT p.*, c.cohort_name, c.year_label
-            FROM perioddata p
-            LEFT JOIN cohortdata c ON p.cohort_ID = c.cohort_ID
-            $orderBy";
+    if ($hasPeTargetId) {
+        // 同時 JOIN 團隊資料（只當 pe_target_ID 不是 'ALL' 時）
+        $sql = "SELECT p.*, c.cohort_name, c.year_label, 
+                       CASE 
+                         WHEN p.pe_target_ID = 'ALL' THEN NULL
+                         ELSE t.team_project_name
+                       END as team_project_name
+                FROM perioddata p
+                LEFT JOIN cohortdata c ON p.cohort_ID = c.cohort_ID
+                LEFT JOIN teamdata t ON CAST(p.pe_target_ID AS CHAR) = CAST(t.team_ID AS CHAR) 
+                    AND p.pe_target_ID != 'ALL'
+                $orderBy";
+    } else {
+        $sql = "SELECT p.*, c.cohort_name, c.year_label, 
+                       NULL as team_project_name
+                FROM perioddata p
+                LEFT JOIN cohortdata c ON p.cohort_ID = c.cohort_ID
+                $orderBy";
+    }
 } else {
     // 如果沒有 cohort_ID 欄位，只查詢 perioddata
-    $sql = "SELECT p.*, NULL as cohort_name, NULL as year_label
-            FROM perioddata p
-            $orderBy";
+    if ($hasPeTargetId) {
+        $sql = "SELECT p.*, NULL as cohort_name, NULL as year_label,
+                       CASE 
+                         WHEN p.pe_target_ID = 'ALL' THEN NULL
+                         ELSE t.team_project_name
+                       END as team_project_name
+                FROM perioddata p
+                LEFT JOIN teamdata t ON CAST(p.pe_target_ID AS CHAR) = CAST(t.team_ID AS CHAR) 
+                    AND p.pe_target_ID != 'ALL'
+                $orderBy";
+    } else {
+        $sql = "SELECT p.*, NULL as cohort_name, NULL as year_label,
+                       NULL as team_project_name
+                FROM perioddata p
+                $orderBy";
+    }
 }
 
 $stmt = $conn->prepare($sql);
@@ -246,7 +283,11 @@ foreach ($tmp as $r) $rankByCreated[$r['period_ID']] = $i++;
       <td><?= htmlspecialchars($r['period_start_d'] ?? '') ?></td>
       <td><?= htmlspecialchars($r['period_end_d'] ?? '') ?></td>
       <td><?= htmlspecialchars($r['period_title'] ?? '') ?></td>
-      <td><?= htmlspecialchars($r['pe_target_ID'] ?? '') ?></td>
+      <td><?= 
+        ($r['pe_target_ID'] ?? '') === 'ALL' ? '全部 (ALL)' : 
+        (($r['team_project_name'] ?? '') ? htmlspecialchars($r['team_project_name']) : 
+        (($r['pe_target_ID'] ?? '') ? htmlspecialchars($r['pe_target_ID']) : '－'))
+      ?></td>
       <td><?= 
         ($r['cohort_name'] ?? '') ? 
         htmlspecialchars($r['cohort_name']) . ' (' . htmlspecialchars($r['year_label'] ?? '') . ')' : 

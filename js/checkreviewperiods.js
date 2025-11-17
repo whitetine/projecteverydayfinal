@@ -109,11 +109,15 @@ function loadTeamList(cohortId, preselectTeamId) {
   fetch(`${apiUrl}?team_list=1&cohort_id=${encodeURIComponent(cohortId)}`)
     .then(r => r.json())
     .then(list => {
-      sel.innerHTML = '<option value="">請選擇團隊</option>';
+      // 先加入「全部」選項
+      sel.innerHTML = '<option value="ALL">全部 (ALL)</option>';
+      // 再加入各團隊選項
       list.forEach(t => {
         sel.innerHTML += `<option value="${t.team_ID}">${t.team_project_name}</option>`;
       });
-      if (preselectTeamId) sel.value = String(preselectTeamId);
+      if (preselectTeamId) {
+        sel.value = String(preselectTeamId);
+      }
     })
     .catch(err => {
         console.error('載入團隊失敗:', err);
