@@ -168,7 +168,14 @@ if (!window._milestoneAppInitialized) {
                         
                         const response = await fetch(url);
                         if (!response.ok) throw new Error('載入失敗');
-                        this.milestones = await response.json();
+                        const data = await response.json();
+                        this.milestones = Array.isArray(data) ? data : [];
+                        
+                        // 調試：檢查狀態為4的里程碑
+                        const pending = this.milestones.filter(m => Number(m.ms_status) === 4);
+                        if (pending.length > 0) {
+                            console.log('待審核里程碑:', pending);
+                        }
                     } catch (error) {
                         console.error('載入里程碑失敗:', error);
                         Swal.fire('錯誤', '載入里程碑失敗', 'error');
@@ -234,16 +241,17 @@ if (!window._milestoneAppInitialized) {
 
                 // 審核里程碑
                 async approveMilestone(milestone, action) {
-                    const actionText = action === 'approve' ? '審核通過' : '退回';
+                    const actionText = action === 'approve' ? '完成' : '退回';
                     const result = await Swal.fire({
                         title: '確認操作',
                         text: `確定要${actionText}「${milestone.ms_title}」嗎？`,
                         icon: 'question',
                         showCancelButton: true,
-                        confirmButtonColor: '#10b981',
+                        confirmButtonColor: action === 'approve' ? '#10b981' : '#ef4444',
                         cancelButtonColor: '#64748b',
                         confirmButtonText: '確定',
-                        cancelButtonText: '取消'
+                        cancelButtonText: '取消',
+                        reverseButtons: true
                     });
 
                     if (!result.isConfirmed) return;
@@ -261,11 +269,30 @@ if (!window._milestoneAppInitialized) {
                         const data = await response.json();
                         if (!data.ok) throw new Error(data.msg || '操作失敗');
 
-                        Swal.fire('成功', `里程碑已${actionText}`, 'success');
-                        this.loadMilestones();
+                        Swal.fire({
+                            icon: 'success',
+                            title: '成功',
+                            text: `里程碑已${actionText}`,
+                            confirmButtonText: '確定',
+                            reverseButtons: true
+                        });
+                        
+                        // 重新載入里程碑列表
+                        await this.loadMilestones();
+                        
+                        // 更新通知數量（如果有的話）
+                        if (typeof updateNotificationCount === 'function') {
+                            updateNotificationCount();
+                        }
                     } catch (error) {
                         console.error('操作失敗:', error);
-                        Swal.fire('錯誤', error.message || '操作失敗', 'error');
+                        Swal.fire({
+                            icon: 'error',
+                            title: '錯誤',
+                            text: error.message || '操作失敗',
+                            confirmButtonText: '確定',
+                            reverseButtons: true
+                        });
                     }
                 },
 
@@ -316,7 +343,8 @@ if (!window._milestoneAppInitialized) {
 
                 // 狀態相關方法
                 getStatusClass(status) {
-                    if (status === 0 || status === 1) return 'status-in-progress'; // 0 舊資料也視為進行中
+                    if (status === 0) return 'status-not-started';
+                    if (status === 1) return 'status-in-progress';
                     if (status === 2) return 'status-rejected';
                     if (status === 3) return 'status-completed';
                     if (status === 4) return 'status-review';
@@ -324,7 +352,8 @@ if (!window._milestoneAppInitialized) {
                 },
 
                 getStatusBadgeClass(status) {
-                    if (status === 0 || status === 1) return 'in-progress';
+                    if (status === 0) return 'not-started';
+                    if (status === 1) return 'in-progress';
                     if (status === 2) return 'rejected';
                     if (status === 3) return 'completed';
                     if (status === 4) return 'review';
@@ -332,7 +361,8 @@ if (!window._milestoneAppInitialized) {
                 },
 
                 getStatusIcon(status) {
-                    if (status === 0 || status === 1) return 'fa-solid fa-clock';
+                    if (status === 0) return 'fa-solid fa-clock';
+                    if (status === 1) return 'fa-solid fa-play-circle';
                     if (status === 2) return 'fa-solid fa-rotate-left';
                     if (status === 3) return 'fa-solid fa-check-circle';
                     if (status === 4) return 'fa-solid fa-hourglass-half';
@@ -340,7 +370,8 @@ if (!window._milestoneAppInitialized) {
                 },
 
                 getStatusText(status) {
-                    if (status === 0 || status === 1) return '進行中'; // 0 舊資料也視為進行中
+                    if (status === 0) return '還未開始';
+                    if (status === 1) return '進行中';
                     if (status === 2) return '退回';
                     if (status === 3) return '已完成';
                     if (status === 4) return '待審核';

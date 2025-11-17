@@ -73,11 +73,12 @@ if (!window._studentMilestoneAppInitialized) {
                         return Math.abs(t - todayMs);
                     };
                     const statusRank = (s) => {
-                        // 0/1:進行中, 2:退回, 3:已完成, 4:待審核
-                        if (s === 0 || s === 1 || s === 2) return 0; // 進行區（含退回）
+                        // 0:還未開始, 1:進行中, 2:退回, 3:已完成, 4:待審核
+                        if (s === 1 || s === 2) return 0; // 進行區（含退回）
+                        if (s === 0) return 0.5;          // 還未開始（在進行區之後）
                         if (s === 4) return 1;            // 待審核
                         if (s === 3) return 2;            // 已完成
-                        return 3;                         // 其他/已刪除
+                        return 3;                         // 其他
                     };
                     return copy.sort((a, b) => {
                         const ra = statusRank(Number(a.ms_status));
@@ -147,8 +148,9 @@ if (!window._studentMilestoneAppInitialized) {
                         return;
                     }
 
-                    // 如果狀態為 3（已完成），不允許再次提交
-                    if (milestone.ms_status === 3) {
+                    // 只允許狀態為 1（進行中）或 2（退回）的里程碑提交
+                    const s = Number(milestone.ms_status);
+                    if (s !== 1 && s !== 2) {
                         return;
                     }
 
@@ -180,10 +182,8 @@ if (!window._studentMilestoneAppInitialized) {
                             return;
                         }
 
-                        // 更新本地狀態為待審核（後端已經寫入資料）
-                        milestone.ms_status = 4;
-                        milestone.ms_completed_d = new Date().toISOString();
-                        milestone.isSubmitting = false;
+                        // 重新載入里程碑列表以獲取最新數據（確保數據持久化）
+                        await this.loadMilestones();
 
                         // 顯示成功提示（確定鍵在右邊）
                         Swal.fire({
@@ -193,8 +193,6 @@ if (!window._studentMilestoneAppInitialized) {
                             confirmButtonText: '確定',
                             reverseButtons: true
                         });
-
-                        // 不需要重新載入，因為已經更新本地狀態
                     } catch (error) {
                         console.error('完成里程碑失敗:', error);
                         // 恢復按鈕狀態
@@ -209,9 +207,68 @@ if (!window._studentMilestoneAppInitialized) {
                     }
                 },
 
+                // 接任務
+                async acceptMilestone(milestone) {
+                    if (milestone.isAccepting) {
+                        return;
+                    }
+                    
+                    if (milestone.ms_status !== 0) {
+                        return;
+                    }
+                    
+                    milestone.isAccepting = true;
+                    
+                    try {
+                        const formData = new FormData();
+                        formData.append('ms_ID', milestone.ms_ID);
+                        
+                        const response = await fetch('api.php?do=accept_milestone', {
+                            method: 'POST',
+                            body: formData
+                        });
+                        
+                        const data = await response.json();
+                        
+                        if (data.status === 'error') {
+                            milestone.isAccepting = false;
+                            Swal.fire({
+                                icon: 'error',
+                                title: '操作失敗',
+                                text: data.message || '無法接取任務',
+                                confirmButtonText: '確定',
+                                reverseButtons: true
+                            });
+                            return;
+                        }
+                        
+                        // 重新載入里程碑列表以獲取最新數據
+                        await this.loadMilestones();
+                        
+                        Swal.fire({
+                            icon: 'success',
+                            title: '任務已接取',
+                            text: '開始計時，請開始完成任務',
+                            confirmButtonText: '確定',
+                            reverseButtons: true
+                        });
+                    } catch (error) {
+                        console.error('接任務失敗:', error);
+                        milestone.isAccepting = false;
+                        Swal.fire({
+                            icon: 'error',
+                            title: '操作失敗',
+                            text: '網路連線錯誤，請稍後再試',
+                            confirmButtonText: '確定',
+                            reverseButtons: true
+                        });
+                    }
+                },
+
                 // 獲取狀態樣式類別（卡片左側顏色）
                 getStatusClass(status) {
-                    if (status === 0 || status === 1) return 'status-in-progress'; // 0 舊資料也視為進行中
+                    if (status === 0) return 'status-not-started';
+                    if (status === 1) return 'status-in-progress';
                     if (status === 2) return 'status-rejected';
                     if (status === 3) return 'status-completed';
                     if (status === 4) return 'status-review';
@@ -220,7 +277,8 @@ if (!window._studentMilestoneAppInitialized) {
 
                 // 獲取狀態標籤樣式類別（右上角 badge）
                 getStatusBadgeClass(status) {
-                    if (status === 0 || status === 1) return 'in-progress'; // 0 舊資料也視為進行中
+                    if (status === 0) return 'not-started';
+                    if (status === 1) return 'in-progress';
                     if (status === 2) return 'rejected';
                     if (status === 3) return 'completed';
                     if (status === 4) return 'review';
@@ -229,7 +287,8 @@ if (!window._studentMilestoneAppInitialized) {
 
                 // 獲取狀態文字
                 getStatusText(status) {
-                    if (status === 0 || status === 1) return '進行中'; // 0 舊資料也視為進行中
+                    if (status === 0) return '還未開始';
+                    if (status === 1) return '進行中';
                     if (status === 2) return '退回';
                     if (status === 3) return '已完成';
                     if (status === 4) return '待審核';
@@ -240,6 +299,7 @@ if (!window._studentMilestoneAppInitialized) {
                 getActionButtonText(milestone) {
                     const s = Number(milestone.ms_status);
                     if (milestone.isSubmitting) return '提交中...';
+                    if (s === 0) return '接任務';
                     if (s === 3) return '已完成';
                     if (s === 4) return '等待審查中';
                     return '提交完成';
@@ -249,12 +309,24 @@ if (!window._studentMilestoneAppInitialized) {
                 isActionDisabled(milestone) {
                     const s = Number(milestone.ms_status);
                     if (milestone.isSubmitting) return true;
+                    if (milestone.isAccepting) return true;
                     // 已完成不可再按
                     if (s === 3) return true;
                     // 待審核不可再按
                     if (s === 4) return true;
-                    // 其他狀態可以按（例如 1 進行中、2 退回）
+                    // 其他狀態可以按（0 還未開始、1 進行中、2 退回）
                     return false;
+                },
+                
+                // 判斷是否顯示接任務按鈕
+                showAcceptButton(milestone) {
+                    return Number(milestone.ms_status) === 0;
+                },
+                
+                // 判斷是否顯示提交完成按鈕
+                showCompleteButton(milestone) {
+                    const s = Number(milestone.ms_status);
+                    return s === 1 || s === 2;
                 },
 
                 // 獲取優先級樣式類別

@@ -60,7 +60,8 @@ if (!$studentTeam) {
 ?>
 <!DOCTYPE html>
 <html lang="zh-Hant">
-<link rel="stylesheet" href="css/student_milestone.css?v=<?= time() ?>">
+<link rel="stylesheet" href="css/student_milestone.css?v=<?= time() ?>" onload="this.onload=null;this.rel='stylesheet'">
+<noscript><link rel="stylesheet" href="css/student_milestone.css?v=<?= time() ?>"></noscript>
 
 <div id="studentMilestoneApp" class="student-milestone-container">
     <!-- 頁面標題 -->
@@ -132,17 +133,17 @@ if (!$studentTeam) {
                 </div>
 
                 <!-- 完成資訊 -->
-                <div class="completion-info" v-if="milestone.ms_status >= 1">
-                    <div class="completion-badge" v-if="milestone.ms_status === 1">
-                        <span>已完成</span>
+                <div class="completion-info" v-if="milestone.ms_status === 3 || milestone.ms_status === 4">
+                    <div class="completion-badge" v-if="milestone.ms_status === 4">
+                        <span>等待審查中</span>
                         <span v-if="milestone.ms_completed_d" class="completion-date">
-                            {{ formatDateTime(milestone.ms_completed_d) }}
+                            提交時間：{{ formatDateTime(milestone.ms_completed_d) }}
                         </span>
                     </div>
-                    <div class="completion-badge approved" v-if="milestone.ms_status === 2">
-                        <span>已通過</span>
+                    <div class="completion-badge approved" v-if="milestone.ms_status === 3">
+                        <span>已完成</span>
                         <span v-if="milestone.ms_approved_d" class="completion-date">
-                            {{ formatDateTime(milestone.ms_approved_d) }}
+                            通過時間：{{ formatDateTime(milestone.ms_approved_d) }}
                         </span>
                     </div>
                 </div>
@@ -151,10 +152,25 @@ if (!$studentTeam) {
             <!-- 操作按鈕 -->
             <div class="milestone-actions">
                 <button 
+                    v-if="showAcceptButton(milestone)"
+                    class="btn-accept" 
+                    :class="{ 'btn-disabled': isActionDisabled(milestone) }"
+                    :disabled="isActionDisabled(milestone)"
+                    @click.stop="acceptMilestone(milestone)">
+                    {{ milestone.isAccepting ? '接取中...' : '接任務' }}
+                </button>
+                <button 
+                    v-if="showCompleteButton(milestone)"
                     class="btn-complete" 
                     :class="{ 'btn-disabled': isActionDisabled(milestone) }"
                     :disabled="isActionDisabled(milestone)"
                     @click.stop="completeMilestone(milestone)">
+                    {{ getActionButtonText(milestone) }}
+                </button>
+                <button 
+                    v-if="milestone.ms_status === 3 || milestone.ms_status === 4"
+                    class="btn-complete btn-disabled" 
+                    disabled>
                     {{ getActionButtonText(milestone) }}
                 </button>
             </div>

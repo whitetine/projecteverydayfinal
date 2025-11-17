@@ -229,15 +229,23 @@
 }
 
 /* 狀態樣式 */
-.milestone-card.status-pending {
+.milestone-card.status-not-started {
+    border-left: 5px solid #94a3b8;
+}
+
+.milestone-card.status-in-progress {
     border-left: 5px solid #f59e0b;
+}
+
+.milestone-card.status-rejected {
+    border-left: 5px solid #f97316;
 }
 
 .milestone-card.status-completed {
     border-left: 5px solid #10b981;
 }
 
-.milestone-card.status-approved {
+.milestone-card.status-review {
     border-left: 5px solid #3b82f6;
 }
 
@@ -246,9 +254,9 @@
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
-    margin-bottom: 1.25rem;
-    padding-bottom: 1rem;
-    border-bottom: 2px solid rgba(226, 232, 240, 0.5);
+    margin-bottom: 0.75rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid rgba(226, 232, 240, 0.5);
 }
 
 .status-badge {
@@ -269,9 +277,19 @@
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
-.status-badge.pending {
+.status-badge.not-started {
+    background: #f1f5f9;
+    color: #475569;
+}
+
+.status-badge.in-progress {
     background: #fef3c7;
     color: #92400e;
+}
+
+.status-badge.rejected {
+    background: #fee2e2;
+    color: #b91c1c;
 }
 
 .status-badge.completed {
@@ -279,7 +297,7 @@
     color: #065f46;
 }
 
-.status-badge.approved {
+.status-badge.review {
     background: #dbeafe;
     color: #1e40af;
 }
@@ -349,37 +367,40 @@
 
 /* 卡片內容 */
 .card-content {
-    margin-bottom: 1.25rem;
+    margin-bottom: 1rem;
     display: flex;
     flex-direction: column;
-    gap: 1rem;
+    gap: 0.5rem;
 }
 
 .milestone-title {
-    font-size: 1.35rem;
+    font-size: 1.2rem;
     font-weight: 700;
     color: #1e293b;
     margin: 0;
     word-break: break-word;
-    line-height: 1.4;
-    letter-spacing: -0.02em;
+    line-height: 1.3;
+    letter-spacing: -0.01em;
 }
 
 @media (min-width: 768px) {
     .milestone-title {
-        font-size: 1.6rem;
+        font-size: 1.35rem;
     }
 }
 
 .milestone-desc {
     color: #64748b;
     margin: 0;
-    line-height: 1.7;
-    font-size: 0.95rem;
-    padding: 0.75rem 1rem;
+    line-height: 1.5;
+    font-size: 0.9rem;
+    padding: 0.5rem 0.75rem;
     background: rgba(102, 126, 234, 0.05);
-    border-radius: 8px;
-    border-left: 3px solid #667eea;
+    border-radius: 6px;
+    border-left: 2px solid #667eea;
+    min-height: 2.5rem;
+    display: flex;
+    align-items: center;
 }
 
 /* 資訊分組 */
@@ -393,19 +414,28 @@
     border: 1px solid rgba(226, 232, 240, 0.8);
 }
 
-.requirement-link,
-.team-info {
+.requirement-link {
     color: #475569;
-    font-size: 0.95rem;
+    font-size: 0.9rem;
     font-weight: 500;
-    padding: 0.5rem 0;
+    padding: 0;
+    margin: 0;
+}
+
+.team-info {
+    color: #1e293b;
+    font-size: 1rem;
+    font-weight: 600;
+    padding: 0;
+    margin: 0;
 }
 
 .time-info {
     display: grid;
     grid-template-columns: 1fr;
-    gap: 0.75rem;
-    padding: 0.75rem 0;
+    gap: 0.5rem;
+    padding: 0.5rem 0;
+    margin-top: 0.5rem;
 }
 
 @media (min-width: 576px) {
@@ -415,30 +445,32 @@
 }
 
 .time-item {
-    padding: 0.5rem 0.75rem;
+    padding: 0.4rem 0.6rem;
     background: rgba(255, 255, 255, 0.8);
-    border-radius: 8px;
-    font-size: 0.9rem;
+    border-radius: 6px;
+    font-size: 0.85rem;
     color: #475569;
     border: 1px solid rgba(226, 232, 240, 0.6);
 }
 
 .completion-info,
 .approval-info {
-    padding: 0.75rem 1rem;
+    padding: 0.5rem 0.75rem;
     background: rgba(255, 255, 255, 0.9);
-    border-radius: 8px;
-    font-size: 0.9rem;
+    border-radius: 6px;
+    font-size: 0.85rem;
     color: #475569;
-    border: 1px solid rgba(226, 232, 240, 0.6);
     margin-top: 0.5rem;
+    border: 1px solid rgba(226, 232, 240, 0.6);
 }
 
 /* 卡片底部 */
 .card-footer {
     margin-top: 0.5rem;
-    padding-top: 1rem;
-    border-top: 2px solid rgba(226, 232, 240, 0.5);
+    padding-top: 0.75rem;
+    border-top: 1px solid rgba(226, 232, 240, 0.5);
+    display: block !important;
+    visibility: visible !important;
 }
 
 .btn-action {
@@ -467,14 +499,39 @@
 }
 
 .btn-approve {
-    background: #3b82f6;
+    background: #10b981;
     color: white;
+    width: 100%;
+    padding: 0.5rem 1rem;
+    border: none;
+    border-radius: 6px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s ease;
 }
 
 .btn-approve:hover {
-    background: #2563eb;
+    background: #059669;
     transform: translateY(-1px);
-    box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+    box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
+}
+
+.btn-reject {
+    background: #ef4444;
+    color: white;
+    width: 100%;
+    padding: 0.5rem 1rem;
+    border: none;
+    border-radius: 6px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.btn-reject:hover {
+    background: #dc2626;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3);
 }
 
 /* 空狀態 */

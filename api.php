@@ -38,10 +38,15 @@ switch (true) {
         require __DIR__ . '/modules/notify.php';
         break;
 
+    // 通知系統
+    case in_array($do, ['get_notifications', 'get_notification_count', 'mark_notification_read']):
+        require __DIR__ . '/modules/notification.php';
+        break;
+
 // 里程碑管理
 case in_array($do, ['get_milestones', 'get_requirements', 'get_teams', 'get_requirement_progress',
                     'create_milestone', 'update_milestone', 'delete_milestone', 'approve_milestone',
-                    'get_student_milestones', 'complete_milestone']):
+                    'get_student_milestones', 'accept_milestone', 'complete_milestone']):
     require __DIR__ . '/modules/milestone.php';
     break;
 

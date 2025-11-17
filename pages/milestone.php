@@ -41,10 +41,6 @@ require '../includes/pdo.php';
 $role_ID = $_SESSION['role_ID'] ?? null;
 $u_ID = $_SESSION['u_ID'] ?? null;
 
-if (!$u_ID) {
-    echo '<div class="alert alert-danger">請先登入</div>';
-    exit;
-}
 
 // 檢查是否為指導老師
 $stmt = $conn->prepare("
@@ -60,7 +56,8 @@ if (!$stmt->fetchColumn()) {
 ?>
 <!DOCTYPE html>
 <html lang="zh-Hant">
-<link rel="stylesheet" href="css/milestone.css?v=<?= time() ?>">
+<link rel="stylesheet" href="css/milestone.css?v=<?= time() ?>" onload="this.onload=null;this.rel='stylesheet'">
+<noscript><link rel="stylesheet" href="css/milestone.css?v=<?= time() ?>"></noscript>
 
 <div id="milestoneApp" class="milestone-container">
     <!-- 頁面標題 -->
@@ -97,6 +94,7 @@ if (!$stmt->fetchColumn()) {
                 </select>
                 <select v-model="filters.status" @change="loadMilestones" class="filter-select">
                     <option value="-1">全部狀態</option>
+                    <option value="0">還未開始</option>
                     <option value="1">進行中</option>
                     <option value="4">待審核</option>
                     <option value="2">退回</option>
@@ -116,7 +114,7 @@ if (!$stmt->fetchColumn()) {
             <!-- 卡片頂部 -->
             <div class="card-header-section">
                 <div style="display: flex; align-items: center; gap: 0.5rem;">
-                    <div class="status-badge" :class="getStatusBadgeClass(milestone.ms_status)">
+                    <div class="status-badge" v-if="Number(milestone.ms_status) !== 0" :class="getStatusBadgeClass(milestone.ms_status)">
                         {{ getStatusText(milestone.ms_status) }}
                     </div>
                     <div class="priority-badge" :class="getPriorityClass(milestone.ms_priority || 0)">
@@ -131,26 +129,25 @@ if (!$stmt->fetchColumn()) {
 
             <!-- 卡片內容 -->
             <div class="card-content">
-                <div>
-                    <h3 class="milestone-title">{{ milestone.ms_title }}</h3>
-                    <p class="milestone-desc" v-if="milestone.ms_desc">{{ milestone.ms_desc }}</p>
+                <!-- 團隊資訊（最上方） -->
+                <div class="team-info" v-if="milestone.team_name">
+                    <span>{{ milestone.team_name }}</span>
                 </div>
                 
-                <!-- 資訊分組 -->
-                <div class="info-group">
-                    <!-- 關聯的基本需求 -->
-                    <div class="requirement-link" v-if="milestone.req_title">
-                        <span>{{ milestone.req_title }}</span>
-                    </div>
-                    <div class="requirement-link text-muted" v-else>
-                        <span>未關聯基本需求</span>
-                    </div>
-
-                    <!-- 團隊資訊 -->
-                    <div class="team-info" v-if="milestone.team_name">
-                        <span>{{ milestone.team_name }}</span>
-                    </div>
+                <!-- 基本需求（團隊下方） -->
+                <div class="requirement-link" v-if="milestone.req_title">
+                    <span>{{ milestone.req_title }}</span>
                 </div>
+                <div class="requirement-link text-muted" v-else>
+                    <span>未關聯基本需求</span>
+                </div>
+
+                <!-- 標題（基本需求下方） -->
+                <h3 class="milestone-title">{{ milestone.ms_title }}</h3>
+                
+                <!-- 說明（標題下方，若無說明也顯示欄位） -->
+                <p class="milestone-desc" v-if="milestone.ms_desc">{{ milestone.ms_desc }}</p>
+                <p class="milestone-desc text-muted" v-else>無說明</p>
 
                 <!-- 時間資訊 -->
                 <div class="time-info">
@@ -184,11 +181,18 @@ if (!$stmt->fetchColumn()) {
             </div>
 
             <!-- 卡片底部操作 -->
-            <div class="card-footer" v-if="milestone.ms_status === 4">
+            <!-- 還未開始狀態顯示 -->
+            <div class="card-footer" v-if="Number(milestone.ms_status) === 0" style="padding-top: 1rem; border-top: 2px solid rgba(226, 232, 240, 0.5); margin-top: 0.5rem;">
+                <div class="status-badge" :class="getStatusBadgeClass(milestone.ms_status)" style="width: 100%; justify-content: center;">
+                    {{ getStatusText(milestone.ms_status) }}
+                </div>
+            </div>
+            <!-- 待審核狀態顯示完成和退回按鈕 -->
+            <div class="card-footer" v-if="Number(milestone.ms_status) === 4" style="padding-top: 1rem; border-top: 2px solid rgba(226, 232, 240, 0.5); margin-top: 0.5rem;">
                 <button class="btn-action btn-approve" @click.stop="approveMilestone(milestone, 'approve')">
-                    審核通過
+                    完成
                 </button>
-                <button class="btn-action btn-complete" style="margin-top:0.5rem" @click.stop="approveMilestone(milestone, 'reject')">
+                <button class="btn-action btn-reject" style="margin-top:0.5rem" @click.stop="approveMilestone(milestone, 'reject')">
                     退回
                 </button>
             </div>

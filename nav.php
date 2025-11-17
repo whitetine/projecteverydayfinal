@@ -29,7 +29,7 @@ $isAdmin = in_array($role_ID, [1, 2]);
                 <button class="btn btn-sm <?= $isAdmin ? 'btn-warning' : 'btn-secondary' ?>" type="submit">Search</button>
             </form>
             <div class="position-relative me-3" style="cursor:pointer;" onclick="$('#bell_box').modal('show')">
-                <span class="badge bg-danger position-absolute top-0 start-100 translate-middle" id="notificationCount">2</span>
+                <span class="badge bg-danger position-absolute top-0 start-100 translate-middle" id="notificationCount" style="display: none;">0</span>
                 <lord-icon src="https://cdn.lordicon.com/bpptgtfr.json"
                     trigger="hover"
                     colors="primary:<?= $isAdmin ? '#ffffff' : '#000000' ?>"

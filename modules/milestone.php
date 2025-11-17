@@ -393,11 +393,15 @@ switch ($do) {
         
         try {
             // 如果 req_ID 為 0，則設為 NULL（允許不關聯基本需求）
+            // 修改日期：2025-11-16
+            // 改動內容：創建里程碑時，狀態為0（還未開始），等待學生接任務
+            // 相關功能：新增里程碑功能
+            // 方式：將 ms_status 設為 0
             $req_ID_value = $req_ID > 0 ? $req_ID : null;
             $stmt = $conn->prepare("
                 INSERT INTO milesdata 
                 (req_ID, team_ID, ms_title, ms_desc, ms_start_d, ms_end_d, ms_status, ms_priority, ms_created_d)
-                VALUES (?, ?, ?, ?, ?, ?, 1, ?, NOW())
+                VALUES (?, ?, ?, ?, ?, ?, 0, ?, NOW())
             ");
             $stmt->execute([$req_ID_value, $team_ID, $ms_title, $ms_desc, $ms_start_d, $ms_end_d, $ms_priority]);
             
@@ -470,6 +474,80 @@ switch ($do) {
         }
         break;
 
+    // 學生接任務
+    case 'accept_milestone':
+        $u_ID = $_SESSION['u_ID'] ?? null;
+        if (!$u_ID) {
+            json_err('請先登入', 'NOT_LOGGED_IN', 401);
+        }
+        
+        // 檢查是否為學生
+        $stmt = $conn->prepare("
+            SELECT COUNT(*) 
+            FROM userrolesdata 
+            WHERE ur_u_ID = ? AND role_ID = 6 AND user_role_status = 1
+        ");
+        $stmt->execute([$u_ID]);
+        if (!$stmt->fetchColumn()) {
+            json_err('此功能僅限學生使用', 'NO_PERMISSION', 403);
+        }
+        
+        $ms_ID = isset($p['ms_ID']) ? (int)$p['ms_ID'] : 0;
+        if ($ms_ID <= 0) json_err('里程碑ID無效');
+        
+        try {
+            // 檢查里程碑是否存在且屬於學生的團隊，且狀態為0（還未開始）
+            // 使用兼容性查詢處理不同版本的資料表結構
+            $milestone = null;
+            try {
+                $stmt = $conn->prepare("
+                    SELECT m.ms_ID, m.team_ID, m.ms_title, m.ms_status, t.team_project_name
+                    FROM milesdata m
+                    JOIN teamdata t ON m.team_ID = t.team_ID
+                    JOIN teammember tm ON t.team_ID = tm.team_ID
+                    WHERE m.ms_ID = ? 
+                      AND tm.team_u_ID = ?
+                      AND t.team_status = 1
+                      AND m.ms_status = 0
+                    LIMIT 1
+                ");
+                $stmt->execute([$ms_ID, $u_ID]);
+                $milestone = $stmt->fetch(PDO::FETCH_ASSOC);
+            } catch (Exception $e) {
+                // 如果失敗，嘗試使用舊的欄位名稱
+                $stmt = $conn->prepare("
+                    SELECT m.ms_ID, m.team_ID, m.ms_title, m.ms_status, t.team_project_name
+                    FROM milesdata m
+                    JOIN teamdata t ON m.team_ID = t.team_ID
+                    JOIN teammember tm ON t.team_ID = tm.team_ID
+                    WHERE m.ms_ID = ? 
+                      AND tm.u_ID = ?
+                      AND t.team_status = 1
+                      AND m.ms_status = 0
+                    LIMIT 1
+                ");
+                $stmt->execute([$ms_ID, $u_ID]);
+                $milestone = $stmt->fetch(PDO::FETCH_ASSOC);
+            }
+            
+            if (!$milestone) {
+                json_err('里程碑不存在、您無權限操作或任務已被接取');
+            }
+            
+            // 更新里程碑：開始時間為當前時間，狀態變為1（進行中）
+            $stmt = $conn->prepare("
+                UPDATE milesdata 
+                SET ms_start_d = NOW(), ms_status = 1
+                WHERE ms_ID = ?
+            ");
+            $stmt->execute([$ms_ID]);
+            
+            json_ok(['message' => '任務已接取，開始計時']);
+        } catch (Throwable $e) {
+            json_err('操作失敗：'.$e->getMessage());
+        }
+        break;
+
     // 學生完成里程碑
     case 'complete_milestone':
         $u_ID = $_SESSION['u_ID'] ?? null;
@@ -497,19 +575,38 @@ switch ($do) {
             // 改動內容：允許進行中(1)與退回(2)的里程碑提交完成
             // 相關功能：學生提交里程碑完成
             // 方式：檢查里程碑是否存在，允許狀態為 1 或 2 的里程碑提交
-            $stmt = $conn->prepare("
-                SELECT m.ms_ID, m.team_ID, m.ms_title, m.ms_status, t.team_project_name
-                FROM milesdata m
-                JOIN teamdata t ON m.team_ID = t.team_ID
-                JOIN teammember tm ON t.team_ID = tm.team_ID
-                WHERE m.ms_ID = ? 
-                  AND (tm.team_u_ID = ? OR tm.u_ID = ?)
-                  AND t.team_status = 1
-                  AND (m.ms_status = 1 OR m.ms_status = 2)
-                LIMIT 1
-            ");
-            $stmt->execute([$ms_ID, $u_ID, $u_ID]);
-            $milestone = $stmt->fetch(PDO::FETCH_ASSOC);
+            // 使用兼容性查詢處理不同版本的資料表結構
+            $milestone = null;
+            try {
+                $stmt = $conn->prepare("
+                    SELECT m.ms_ID, m.team_ID, m.ms_title, m.ms_status, t.team_project_name
+                    FROM milesdata m
+                    JOIN teamdata t ON m.team_ID = t.team_ID
+                    JOIN teammember tm ON t.team_ID = tm.team_ID
+                    WHERE m.ms_ID = ? 
+                      AND tm.team_u_ID = ?
+                      AND t.team_status = 1
+                      AND (m.ms_status = 1 OR m.ms_status = 2)
+                    LIMIT 1
+                ");
+                $stmt->execute([$ms_ID, $u_ID]);
+                $milestone = $stmt->fetch(PDO::FETCH_ASSOC);
+            } catch (Exception $e) {
+                // 如果失敗，嘗試使用舊的欄位名稱
+                $stmt = $conn->prepare("
+                    SELECT m.ms_ID, m.team_ID, m.ms_title, m.ms_status, t.team_project_name
+                    FROM milesdata m
+                    JOIN teamdata t ON m.team_ID = t.team_ID
+                    JOIN teammember tm ON t.team_ID = tm.team_ID
+                    WHERE m.ms_ID = ? 
+                      AND tm.u_ID = ?
+                      AND t.team_status = 1
+                      AND (m.ms_status = 1 OR m.ms_status = 2)
+                    LIMIT 1
+                ");
+                $stmt->execute([$ms_ID, $u_ID]);
+                $milestone = $stmt->fetch(PDO::FETCH_ASSOC);
+            }
             
             if (!$milestone) {
                 json_err('里程碑不存在或您無權限操作');
@@ -532,7 +629,9 @@ switch ($do) {
             // 改動內容：修正查詢邏輯，使用兼容性處理不同版本的資料表結構
             // 相關功能：獲取團隊指導老師
             // 方式：先嘗試 team_u_ID，失敗則嘗試 u_ID
+            $teachers = [];
             try {
+                // 先嘗試使用 team_u_ID
                 $stmt = $conn->prepare("
                     SELECT DISTINCT tm.team_u_ID
                     FROM teammember tm
@@ -541,16 +640,34 @@ switch ($do) {
                 ");
                 $stmt->execute([$milestone['team_ID']]);
                 $teachers = $stmt->fetchAll(PDO::FETCH_COLUMN);
+                
+                // 如果沒有找到，嘗試使用 u_ID
+                if (empty($teachers)) {
+                    $stmt = $conn->prepare("
+                        SELECT DISTINCT tm.u_ID
+                        FROM teammember tm
+                        JOIN userrolesdata ur ON ur.ur_u_ID = tm.u_ID
+                        WHERE tm.team_ID = ? AND ur.role_ID = 4 AND ur.user_role_status = 1
+                    ");
+                    $stmt->execute([$milestone['team_ID']]);
+                    $teachers = $stmt->fetchAll(PDO::FETCH_COLUMN);
+                }
             } catch (Exception $e) {
                 // 如果失敗，嘗試使用舊的欄位名稱
-                $stmt = $conn->prepare("
-                    SELECT DISTINCT tm.u_ID
-                    FROM teammember tm
-                    JOIN userrolesdata ur ON ur.ur_u_ID = tm.u_ID
-                    WHERE tm.team_ID = ? AND ur.role_ID = 4 AND ur.user_role_status = 1
-                ");
-                $stmt->execute([$milestone['team_ID']]);
-                $teachers = $stmt->fetchAll(PDO::FETCH_COLUMN);
+                try {
+                    $stmt = $conn->prepare("
+                        SELECT DISTINCT tm.u_ID
+                        FROM teammember tm
+                        JOIN userrolesdata ur ON ur.ur_u_ID = tm.u_ID
+                        WHERE tm.team_ID = ? AND ur.role_ID = 4 AND ur.user_role_status = 1
+                    ");
+                    $stmt->execute([$milestone['team_ID']]);
+                    $teachers = $stmt->fetchAll(PDO::FETCH_COLUMN);
+                } catch (Exception $e2) {
+                    // 如果還是失敗，記錄錯誤但不中斷流程
+                    error_log("獲取指導老師失敗: " . $e2->getMessage());
+                    $teachers = [];
+                }
             }
             
             // 為每位指導老師創建通知
@@ -565,24 +682,44 @@ switch ($do) {
                 $studentName = $stmt->fetchColumn() ?: '學生';
                 
                 // 創建通知
-                $stmt = $conn->prepare("
-                    INSERT INTO msgdata 
-                    (msg_title, msg_content, msg_type, msg_status, msg_start_d, msg_created_d, msg_a_u_ID)
-                    VALUES (?, ?, 'SYSTEM_NOTICE', 1, NOW(), NOW(), ?)
-                ");
-                $msgTitle = "里程碑完成通知";
-                $msgContent = "團隊「{$milestone['team_project_name']}」的里程碑「{$milestone['ms_title']}」已由 {$studentName} 標記為完成。";
-                $stmt->execute([$msgTitle, $msgContent, $u_ID]);
-                $msg_ID = $conn->lastInsertId();
-                
-                // 為每位指導老師添加通知目標
-                $stmt = $conn->prepare("
-                    INSERT INTO msgtargetdata (msg_ID, msg_target_type, msg_target_ID)
-                    VALUES (?, 'USER', ?)
-                ");
-                foreach ($teachers as $teacher_ID) {
-                    $stmt->execute([$msg_ID, $teacher_ID]);
+                // 修改日期：2025-11-16
+                // 改動內容：通知發送者改為系統（u_ID='system'）
+                // 相關功能：完成里程碑通知
+                // 方式：將 msg_a_u_ID 設為 'system'
+                try {
+                    $stmt = $conn->prepare("
+                        INSERT INTO msgdata 
+                        (msg_title, msg_content, msg_type, msg_status, msg_start_d, msg_created_d, msg_a_u_ID)
+                        VALUES (?, ?, 'SYSTEM_NOTICE', 1, NOW(), NOW(), 'system')
+                    ");
+                    $msgTitle = "里程碑完成通知";
+                    $msgContent = "團隊「{$milestone['team_project_name']}」的里程碑「{$milestone['ms_title']}」已由 {$studentName} 標記為完成。";
+                    $stmt->execute([$msgTitle, $msgContent]);
+                    $msg_ID = $conn->lastInsertId();
+                    
+                    if ($msg_ID > 0) {
+                        // 為每位指導老師添加通知目標
+                        $stmt = $conn->prepare("
+                            INSERT INTO msgtargetdata (msg_ID, msg_target_type, msg_target_ID)
+                            VALUES (?, 'USER', ?)
+                        ");
+                        foreach ($teachers as $teacher_ID) {
+                            if (!empty($teacher_ID)) {
+                                try {
+                                    $stmt->execute([$msg_ID, $teacher_ID]);
+                                } catch (Exception $e) {
+                                    error_log("為老師 {$teacher_ID} 添加通知目標失敗: " . $e->getMessage());
+                                }
+                            }
+                        }
+                    }
+                } catch (Exception $e) {
+                    // 記錄錯誤但不中斷流程
+                    error_log("創建通知失敗: " . $e->getMessage());
                 }
+            } else {
+                // 如果沒有找到老師，記錄警告
+                error_log("警告：團隊 {$milestone['team_ID']} 沒有找到指導老師，無法發送通知");
             }
             
             json_ok(['message' => '里程碑已標記為完成']);
@@ -602,6 +739,20 @@ switch ($do) {
         if (!in_array($action, ['approve', 'reject'])) json_err('無效的操作');
         
         try {
+            // 先獲取里程碑資訊
+            $stmt = $conn->prepare("
+                SELECT m.ms_ID, m.team_ID, m.ms_title, t.team_project_name
+                FROM milesdata m
+                JOIN teamdata t ON m.team_ID = t.team_ID
+                WHERE m.ms_ID = ?
+            ");
+            $stmt->execute([$ms_ID]);
+            $milestone = $stmt->fetch(PDO::FETCH_ASSOC);
+            
+            if (!$milestone) {
+                json_err('里程碑不存在');
+            }
+            
             if ($action === 'approve') {
                 // 通過：保留學生提交的完成時間與完成者，寫入審核者與審核時間，狀態改為 3(已完成)
                 $stmt = $conn->prepare("
@@ -618,6 +769,93 @@ switch ($do) {
                     WHERE ms_ID = ?
                 ");
                 $stmt->execute([$ms_ID]);
+                
+                // 獲取團隊的所有成員（學生，不包括指導老師）
+                // 修改日期：2025-11-18
+                // 改動內容：退回里程碑時，通知團隊的所有成員（學生），不包括指導老師
+                // 相關功能：退回里程碑通知
+                // 方式：查詢團隊成員並排除指導老師（role_ID=4）
+                $teamMembers = [];
+                try {
+                    // 先嘗試使用 team_u_ID，排除指導老師
+                    $stmt = $conn->prepare("
+                        SELECT DISTINCT tm.team_u_ID
+                        FROM teammember tm
+                        LEFT JOIN userrolesdata ur ON ur.ur_u_ID = tm.team_u_ID AND ur.role_ID = 4 AND ur.user_role_status = 1
+                        WHERE tm.team_ID = ? AND ur.ur_u_ID IS NULL
+                    ");
+                    $stmt->execute([$milestone['team_ID']]);
+                    $teamMembers = $stmt->fetchAll(PDO::FETCH_COLUMN);
+                    
+                    // 如果沒有找到，嘗試使用 u_ID
+                    if (empty($teamMembers)) {
+                        $stmt = $conn->prepare("
+                            SELECT DISTINCT tm.u_ID
+                            FROM teammember tm
+                            LEFT JOIN userrolesdata ur ON ur.ur_u_ID = tm.u_ID AND ur.role_ID = 4 AND ur.user_role_status = 1
+                            WHERE tm.team_ID = ? AND ur.ur_u_ID IS NULL
+                        ");
+                        $stmt->execute([$milestone['team_ID']]);
+                        $teamMembers = $stmt->fetchAll(PDO::FETCH_COLUMN);
+                    }
+                } catch (Exception $e) {
+                    // 如果失敗，嘗試使用舊的欄位名稱，排除指導老師
+                    try {
+                        $stmt = $conn->prepare("
+                            SELECT DISTINCT tm.u_ID
+                            FROM teammember tm
+                            LEFT JOIN userrolesdata ur ON ur.ur_u_ID = tm.u_ID AND ur.role_ID = 4 AND ur.user_role_status = 1
+                            WHERE tm.team_ID = ? AND ur.ur_u_ID IS NULL
+                        ");
+                        $stmt->execute([$milestone['team_ID']]);
+                        $teamMembers = $stmt->fetchAll(PDO::FETCH_COLUMN);
+                    } catch (Exception $e2) {
+                        error_log("獲取團隊成員失敗: " . $e2->getMessage());
+                        $teamMembers = [];
+                    }
+                }
+                
+                // 獲取指導老師姓名
+                $stmt = $conn->prepare("SELECT u_name FROM userdata WHERE u_ID = ?");
+                $stmt->execute([$u_ID]);
+                $teacherName = $stmt->fetchColumn() ?: '指導老師';
+                
+                // 為團隊所有成員創建通知
+                if (count($teamMembers) > 0) {
+                    try {
+                        $stmt = $conn->prepare("
+                            INSERT INTO msgdata 
+                            (msg_title, msg_content, msg_type, msg_status, msg_start_d, msg_created_d, msg_a_u_ID)
+                            VALUES (?, ?, 'SYSTEM_NOTICE', 1, NOW(), NOW(), 'system')
+                        ");
+                        $msgTitle = "里程碑退回通知";
+                        $msgContent = "團隊「{$milestone['team_project_name']}」的里程碑「{$milestone['ms_title']}」已被 {$teacherName} 退回，請重新提交。";
+                        $stmt->execute([$msgTitle, $msgContent]);
+                        $msg_ID = $conn->lastInsertId();
+                        
+                        if ($msg_ID > 0) {
+                            // 為每位團隊成員添加通知目標
+                            $stmt = $conn->prepare("
+                                INSERT INTO msgtargetdata (msg_ID, msg_target_type, msg_target_ID)
+                                VALUES (?, 'USER', ?)
+                            ");
+                            foreach ($teamMembers as $member_ID) {
+                                if (!empty($member_ID)) {
+                                    try {
+                                        $stmt->execute([$msg_ID, $member_ID]);
+                                    } catch (Exception $e) {
+                                        error_log("為成員 {$member_ID} 添加通知目標失敗: " . $e->getMessage());
+                                    }
+                                }
+                            }
+                        }
+                    } catch (Exception $e) {
+                        // 記錄錯誤但不中斷流程
+                        error_log("創建退回通知失敗: " . $e->getMessage());
+                    }
+                } else {
+                    error_log("警告：團隊 {$milestone['team_ID']} 沒有找到成員，無法發送退回通知");
+                }
             }
             
             json_ok(['message' => '操作成功']);
