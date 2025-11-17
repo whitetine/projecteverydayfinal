@@ -26,11 +26,11 @@ $sort = $_GET['sort'] ?? 'created';
 
         <div class="col-md-3">
           <label class="form-label">開始日</label>
-          <input type="date" class="form-control" name="period_start_d" id="period_start_d" required>
+          <input type="datetime-local" class="form-control" name="period_start_d" id="period_start_d" required>
         </div>
         <div class="col-md-3">
           <label class="form-label">結束日</label>
-          <input type="date" class="form-control" name="period_end_d" id="period_end_d" required>
+          <input type="datetime-local" class="form-control" name="period_end_d" id="period_end_d" required>
         </div>
         <div class="col-md-3">
           <label class="form-label">標題</label>

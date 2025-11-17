@@ -38,6 +38,12 @@ body.sb-nav-fixed { padding-top: 0 !important; }
   width: 100%;
 }
 
+/* 自動計算 navbar 高度，用於 spacer */
+/* JavaScript 會動態設置這個值，這裡只提供備用值 */
+:root {
+  --navbar-height: 56px; /* 備用值，JavaScript 會覆蓋這個值 */
+}
+
 /* 通知 badge 必須在 navbar 之上 */
 #notificationCount {
   z-index: 1070 !important;
@@ -97,13 +103,15 @@ body.sb-nav-fixed { padding-top: 0 !important; }
 }
 
 /* ==== 版面骨架：左側欄 + 右側主區 ==== */
+/* 在 nav 後面添加 spacer，高度與 navbar 相同，用 nav 遮住 */
 #layoutSidenav {
   display: flex;
-  min-height: calc(100vh - 56px); /* 扣掉上方 navbar */
-  margin-top: 56px; /* 從 navbar 下方開始 */
+  min-height: calc(100vh - var(--navbar-height, 56px));
+  margin-top: var(--navbar-height, 56px); /* 從 navbar 下方開始，自動計算高度 */
+  position: relative;
 }
 
-/* 側邊欄 */
+/* 側邊欄 - 從 navbar 下方開始延伸 */
 #layoutSidenav_nav {
   flex: 0 0 var(--sidebar-w);
   width: var(--sidebar-w);
@@ -111,13 +119,14 @@ body.sb-nav-fixed { padding-top: 0 !important; }
   transition: width 0.3s ease;
   overflow: hidden;
   position: fixed;
-  top: 56px; /* 從 navbar 下方開始 */
+  top: var(--navbar-height, 56px); /* 從 navbar 下方開始，自動計算 */
   left: 0;
-  height: calc(100vh - 56px); /* 高度扣掉 navbar */
+  height: calc(100vh - var(--navbar-height, 56px)); /* 高度扣掉 navbar，自動計算 */
   z-index: 1040 !important; /* 高於內容，但低於 navbar */
 }
 
 /* 主內容（你在 main.php 的 <main id="content">） */
+/* 確保內容從 navbar 下方開始，不會被遮住 */
 #content {
   flex: 1 1 auto;
   background-color: #ffffff;
@@ -125,6 +134,9 @@ body.sb-nav-fixed { padding-top: 0 !important; }
   padding: 1rem;               /* 統一左右留白，讓內容更靠左 */
   transition: padding 0.2s ease;
   margin-left: var(--sidebar-w); /* 為 sidebar 留出空間 */
+  margin-top: 0; /* 移除多餘的 margin-top，因為 layoutSidenav 已經有 margin-top */
+  min-height: calc(100vh - var(--navbar-height, 56px)); /* 確保內容區域高度正確 */
+  position: relative;
 }
 
 /* ==== 收合狀態 ==== */
@@ -288,9 +300,9 @@ body.sb-sidenav-toggled .nav-link { justify-content: center; }
 /* 展開：允許溢出、維持層級（低於 navbar） */
 body:not(.sb-sidenav-toggled) #layoutSidenav_nav { 
   position: fixed;
-  top: 56px;
+  top: var(--navbar-height, 56px); /* 使用自動計算的高度 */
   left: 0;
-  height: calc(100vh - 56px);
+  height: calc(100vh - var(--navbar-height, 56px)); /* 使用自動計算的高度 */
   z-index: 1040 !important; 
 }
 body:not(.sb-sidenav-toggled) #layoutSidenav_nav,
@@ -301,9 +313,9 @@ body:not(.sb-sidenav-toggled) .sb-sidenav .sb-sidenav-menu { overflow: visible !
 /* 收合：關閉溢出、維持層級 */
 body.sb-sidenav-toggled #layoutSidenav_nav { 
   position: fixed;
-  top: 56px;
+  top: var(--navbar-height, 56px); /* 使用自動計算的高度 */
   left: 0;
-  height: calc(100vh - 56px);
+  height: calc(100vh - var(--navbar-height, 56px)); /* 使用自動計算的高度 */
   z-index: 1040 !important; 
 }
 body.sb-sidenav-toggled #layoutSidenav_nav,

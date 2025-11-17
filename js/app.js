@@ -225,16 +225,34 @@ mounted() {
   };
 
   // ========================
+  // 通用的 Vue App 清理函數
+  // ========================
+  function cleanupVueApps() {
+    // 清理 currentApp（由 render 函式返回的）
+    if (currentApp && typeof currentApp.unmount === 'function') {
+      try { 
+        currentApp.unmount(); 
+      } catch (e) { 
+        console.warn('清理 currentApp 時出錯:', e);
+      }
+      currentApp = null;
+    }
+    
+    // 觸發自定義事件，讓各個頁面自己清理
+    const unloadEvent = new CustomEvent('pageBeforeUnload', {
+      detail: { path: location.hash }
+    });
+    window.dispatchEvent(unloadEvent);
+  }
+
+  // ========================
   // 通用子頁載入器（hash 控制）
   // ========================
   window.loadSubpage = function loadSubpage(path) {
     if (!path || !path.startsWith(BASE_PREFIX)) return;
 
-    // 卸載上一個 Vue App（若有）
-    if (currentApp && typeof currentApp.unmount === 'function') {
-      try { currentApp.unmount(); } catch (e) { }
-      currentApp = null;
-    }
+    // 先觸發清理事件，讓各個頁面自己清理（包括重置初始化標記）
+    cleanupVueApps();
 
     // 显示加载提示，保持容器高度避免跳动
     $(CONTENT_SEL).html('<div class="p-5 text-center text-secondary" style="min-height: 400px; display: flex; align-items: center; justify-content: center;">載入中…</div>');
