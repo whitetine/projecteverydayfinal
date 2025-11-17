@@ -51,7 +51,7 @@ $apiBase = rtrim(dirname($_SERVER['PHP_SELF']), '/');
   </form>
 </div>
 
-<link rel="stylesheet" href="../css/work-form.css">
-<script src="../js/work-form.js"></script>
+<link rel="stylesheet" href="css/work-form.css">
+<script src="js/work-form.js"></script>
 
 
