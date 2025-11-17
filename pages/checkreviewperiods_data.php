@@ -14,43 +14,119 @@ switch ($sort) {
 
 /* CRUD: create */
 if ($_POST['action'] ?? '' === 'create') {
-    $sql = "INSERT INTO perioddata
-        (period_start_d, period_end_d, period_title, pe_target_ID, cohort_ID,
-         pe_created_d, pe_created_u_ID, pe_role_ID, pe_status)
-        VALUES (?, ?, ?, ?, ?, NOW(), ?, ?, ?)";
+    // 檢查欄位是否存在
+    $hasCohortId = false;
+    $hasPeTargetId = false;
+    $hasPeRoleId = false;
+    try {
+        $checkStmt = $conn->query("SHOW COLUMNS FROM perioddata");
+        $columns = $checkStmt->fetchAll(PDO::FETCH_COLUMN);
+        $hasCohortId = in_array('cohort_ID', $columns);
+        $hasPeTargetId = in_array('pe_target_ID', $columns);
+        $hasPeRoleId = in_array('pe_role_ID', $columns);
+    } catch (Exception $e) {
+        // 如果檢查失敗，使用預設值
+    }
+
+    // 根據欄位存在情況動態建立 SQL
+    $fields = ['period_start_d', 'period_end_d', 'period_title'];
+    $values = [$_POST['period_start_d'], $_POST['period_end_d'], $_POST['period_title']];
+    $placeholders = ['?', '?', '?'];
+
+    if ($hasPeTargetId) {
+        $fields[] = 'pe_target_ID';
+        $values[] = $_POST['pe_target_ID'] ?? null;
+        $placeholders[] = '?';
+    }
+    if ($hasCohortId) {
+        $fields[] = 'cohort_ID';
+        $values[] = $_POST['cohort_ID'] ?? null;
+        $placeholders[] = '?';
+    }
+
+    $fields[] = 'pe_created_d';
+    $placeholders[] = 'NOW()';
+
+    $fields[] = 'pe_created_u_ID';
+    $values[] = $_SESSION['u_ID'] ?? null;
+    $placeholders[] = '?';
+
+    if ($hasPeRoleId) {
+        $fields[] = 'pe_role_ID';
+        $values[] = $_SESSION['role_ID'] ?? null;
+        $placeholders[] = '?';
+    }
+
+    $fields[] = 'pe_status';
+    $values[] = isset($_POST['pe_status']) ? 1 : 0;
+    $placeholders[] = '?';
+
+    $sql = "INSERT INTO perioddata (" . implode(', ', $fields) . ")
+            VALUES (" . implode(', ', $placeholders) . ")";
 
     $stmt = $conn->prepare($sql);
-    $stmt->execute([
-        $_POST['period_start_d'],
-        $_POST['period_end_d'],
-        $_POST['period_title'],
-        $_POST['pe_target_ID'],
-        $_POST['cohort_ID'],
-        $_SESSION['u_ID'] ?? null,
-        $_SESSION['role_ID'] ?? null,
-        isset($_POST['pe_status']) ? 1 : 0
-    ]);
+    $stmt->execute($values);
+    
+    // 如果是 AJAX 請求，返回 JSON；否則重定向
+    if (isset($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') {
+        header('Content-Type: application/json; charset=utf-8');
+        echo json_encode(['success' => true, 'msg' => '已新增評分時段']);
+        exit;
+    }
     header("Location: checkreviewperiods.php?sort=$sort");
     exit;
 }
 
 /* CRUD: update */
 if ($_POST['action'] ?? '' === 'update') {
-    $sql = "UPDATE perioddata
-            SET period_start_d=?, period_end_d=?, period_title=?, 
-                pe_target_ID=?, cohort_ID=?, pe_status=?
-            WHERE period_ID=?";
+    // 檢查欄位是否存在
+    $hasCohortId = false;
+    $hasPeTargetId = false;
+    try {
+        $checkStmt = $conn->query("SHOW COLUMNS FROM perioddata");
+        $columns = $checkStmt->fetchAll(PDO::FETCH_COLUMN);
+        $hasCohortId = in_array('cohort_ID', $columns);
+        $hasPeTargetId = in_array('pe_target_ID', $columns);
+    } catch (Exception $e) {
+        // 如果檢查失敗，使用預設值
+    }
 
-    $stmt = $conn->prepare($sql);
-    $stmt->execute([
+    // 根據欄位存在情況動態建立 SQL
+    $sets = [
+        'period_start_d=?',
+        'period_end_d=?',
+        'period_title=?'
+    ];
+    $values = [
         $_POST['period_start_d'],
         $_POST['period_end_d'],
-        $_POST['period_title'],
-        $_POST['pe_target_ID'],
-        $_POST['cohort_ID'],
-        isset($_POST['pe_status']) ? 1 : 0,
-        $_POST['period_ID']
-    ]);
+        $_POST['period_title']
+    ];
+
+    if ($hasPeTargetId) {
+        $sets[] = 'pe_target_ID=?';
+        $values[] = $_POST['pe_target_ID'] ?? null;
+    }
+    if ($hasCohortId) {
+        $sets[] = 'cohort_ID=?';
+        $values[] = $_POST['cohort_ID'] ?? null;
+    }
+
+    $sets[] = 'pe_status=?';
+    $values[] = isset($_POST['pe_status']) ? 1 : 0;
+    $values[] = $_POST['period_ID']; // WHERE 條件
+
+    $sql = "UPDATE perioddata SET " . implode(', ', $sets) . " WHERE period_ID=?";
+
+    $stmt = $conn->prepare($sql);
+    $stmt->execute($values);
+    
+    // 如果是 AJAX 請求，返回 JSON；否則重定向
+    if (isset($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') {
+        header('Content-Type: application/json; charset=utf-8');
+        echo json_encode(['success' => true, 'msg' => '已更新評分時段']);
+        exit;
+    }
     header("Location: checkreviewperiods.php?sort=$sort");
     exit;
 }
@@ -115,10 +191,29 @@ if (isset($_GET['team_list'])) {
 
 
 /* 取得表格資料 */
-$sql = "SELECT p.*, c.cohort_name, c.year_label
-        FROM perioddata p
-        LEFT JOIN cohortdata c ON p.cohort_ID = c.cohort_ID
-        $orderBy";
+// 先檢查 perioddata 表是否有 cohort_ID 欄位
+$hasCohortId = false;
+try {
+    $checkStmt = $conn->query("SHOW COLUMNS FROM perioddata LIKE 'cohort_ID'");
+    $hasCohortId = $checkStmt->rowCount() > 0;
+} catch (Exception $e) {
+    // 如果檢查失敗，假設沒有這個欄位
+    $hasCohortId = false;
+}
+
+if ($hasCohortId) {
+    // 如果有 cohort_ID 欄位，使用 JOIN
+    $sql = "SELECT p.*, c.cohort_name, c.year_label
+            FROM perioddata p
+            LEFT JOIN cohortdata c ON p.cohort_ID = c.cohort_ID
+            $orderBy";
+} else {
+    // 如果沒有 cohort_ID 欄位，只查詢 perioddata
+    $sql = "SELECT p.*, NULL as cohort_name, NULL as year_label
+            FROM perioddata p
+            $orderBy";
+}
+
 $stmt = $conn->prepare($sql);
 $stmt->execute();
 $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -147,19 +242,23 @@ foreach ($tmp as $r) $rankByCreated[$r['period_ID']] = $i++;
   <tbody>
 <?php foreach ($rows as $r): ?>
     <tr>
-      <td><?= $rankByCreated[$r['period_ID']] ?></td>
-      <td><?= htmlspecialchars($r['period_start_d']) ?></td>
-      <td><?= htmlspecialchars($r['period_end_d']) ?></td>
-      <td><?= htmlspecialchars($r['period_title']) ?></td>
-      <td><?= htmlspecialchars($r['pe_target_ID']) ?></td>
-      <td><?= htmlspecialchars($r['cohort_name']) ?> (<?= htmlspecialchars($r['year_label']) ?>)</td>
-      <td><?= $r['pe_status'] ? '✔' : '✘' ?></td>
-      <td><?= htmlspecialchars($r['pe_created_d']) ?></td>
+      <td><?= $rankByCreated[$r['period_ID']] ?? '' ?></td>
+      <td><?= htmlspecialchars($r['period_start_d'] ?? '') ?></td>
+      <td><?= htmlspecialchars($r['period_end_d'] ?? '') ?></td>
+      <td><?= htmlspecialchars($r['period_title'] ?? '') ?></td>
+      <td><?= htmlspecialchars($r['pe_target_ID'] ?? '') ?></td>
+      <td><?= 
+        ($r['cohort_name'] ?? '') ? 
+        htmlspecialchars($r['cohort_name']) . ' (' . htmlspecialchars($r['year_label'] ?? '') . ')' : 
+        '－'
+      ?></td>
+      <td><?= ($r['pe_status'] ?? 0) ? '✔' : '✘' ?></td>
+      <td><?= htmlspecialchars($r['pe_created_d'] ?? '') ?></td>
       <td>
         <button class="btn btn-sm btn-outline-primary" 
           onclick='editRow(<?= json_encode($r, JSON_UNESCAPED_UNICODE) ?>)'>編輯</button>
 
-        <form method="post" action="checkreviewperiods_data.php" class="d-inline" onsubmit="return confirm('確定刪除？');">
+        <form method="post" action="pages/checkreviewperiods_data.php" class="d-inline" onsubmit="return confirm('確定刪除？');">
           <input type="hidden" name="action" value="delete">
           <input type="hidden" name="period_ID" value="<?= $r['period_ID'] ?>">
           <input type="hidden" name="sort" value="<?= htmlspecialchars($sort) ?>">

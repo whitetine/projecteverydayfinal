@@ -19,7 +19,7 @@ $sort = $_GET['sort'] ?? 'created';
   <!-- 表單 -->
   <div class="card mb-4">
     <div class="card-body">
-      <form id="periodForm" method="post" action="checkreviewperiods_data.php" class="row g-3">
+      <form id="periodForm" method="post" action="pages/checkreviewperiods_data.php" class="row g-3">
         <input type="hidden" name="action" id="form_action" value="create">
         <input type="hidden" name="period_ID" id="period_ID">
         <input type="hidden" name="sort" value="<?= htmlspecialchars($sort) ?>">
@@ -69,6 +69,6 @@ $sort = $_GET['sort'] ?? 'created';
   <!-- 資料表 -->
   <div id="periodTable"></div>
 </div>
-<link rel="stylesheet" href="../css/checkreviewperiods.css">
-<script src="../js/checkreviewperiods.js"></script>
+<link rel="stylesheet" href="/css/checkreviewperiods.css">
+<script src="/js/checkreviewperiods.js"></script>
 
