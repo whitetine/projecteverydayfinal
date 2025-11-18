@@ -78,6 +78,17 @@ $sort = $_GET['sort'] ?? 'created';
           </div>
           <input type="hidden" name="pe_target_ID" id="team_input" value="ALL">
         </div>
+        <div class="col-md-4 d-none" id="receiveTeamField">
+          <label class="form-label">被評分團隊</label>
+          <div class="team-picker-input" id="receivePickerTrigger" role="button" tabindex="0" aria-label="被評分團隊挑選">
+            <div class="team-picker-content">
+              <span id="receivePickerSummary" class="placeholder">僅團隊間互評可設定</span>
+              <div class="team-picker-tags" id="receivePickerTags"></div>
+            </div>
+            <button type="button" class="clear-btn" id="receivePickerClear" aria-label="清除被評分團隊">&times;</button>
+          </div>
+          <input type="hidden" id="team_receive_input" value="">
+        </div>
 
         <input type="hidden" name="pe_status" id="pe_status" value="1">
 
@@ -95,13 +106,30 @@ $sort = $_GET['sort'] ?? 'created';
 <!-- 指定團隊選擇 Modal -->
 <div class="team-picker-modal" id="teamPickerModal" aria-hidden="true">
   <div class="team-picker-dialog">
-    <div class="team-picker-header">
-      <div class="selected-display" id="teamModalSelected"></div>
-      <button type="button" class="btn-close" id="teamPickerClose" aria-label="關閉">×</button>
+    <button type="button" class="btn-close" id="teamPickerClose" aria-label="關閉">×</button>
+    <div class="team-dual-panel">
+      <div class="team-panel assign">
+        <div class="panel-title">
+          <span>指定團隊</span>
+          <small id="teamModalAssignHint">未選擇（儲存後等同全部團隊）</small>
+        </div>
+        <div class="selected-display" id="teamModalAssignSelected"></div>
+      </div>
+      <div class="panel-arrow">
+        <button type="button" id="teamPickerMirror" class="mirror-btn" title="套用至被評分">➜</button>
+      </div>
+      <div class="team-panel receive">
+        <div class="panel-title">
+          <span>被評分團隊</span>
+          <small id="teamModalReceiveHint">未選擇（儲存後等同全部團隊）</small>
+        </div>
+        <div class="selected-display" id="teamModalReceiveSelected"></div>
+      </div>
     </div>
-    <div class="team-picker-body">
+    <div class="team-picker-body dual">
       <div class="team-modal-placeholder" id="teamModalPlaceholder">請先選擇屆別與班級</div>
-      <div class="team-chip-grid" id="teamModalList"></div>
+      <div class="team-panel-body assign" id="teamModalAssignList"></div>
+      <div class="team-panel-body receive" id="teamModalReceiveList"></div>
     </div>
     <div class="team-picker-footer">
       <button type="button" class="btn btn-outline-secondary" id="teamPickerCancel">取消</button>

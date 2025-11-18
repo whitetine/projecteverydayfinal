@@ -13,11 +13,17 @@ function resolveCheckReviewPeriodsApiUrl() {
 let pendingClassValue = '';
 const teamPickerState = {
   enabled: true,
+  mode: 'in',
   list: [],
   selectedIds: [],
+  receiveIds: [],
   summaryMessage: '請先選擇屆別',
+  receiveSummaryMessage: '請先選擇屆別',
   modalSelections: [],
-  pendingSelections: []
+  receiveModalSelections: [],
+  pendingSelections: [],
+  pendingReceiveSelections: [],
+  activePanel: 'assign'
 };
 
 function __initCheckReviewPeriods() {
@@ -300,6 +306,25 @@ function parseTeamIdList(raw) {
     .filter(Boolean);
 }
 
+function parseTeamAssignmentPayload(raw) {
+  if (!raw || raw === 'ALL') {
+    return { assign: [], receive: [] };
+  }
+  if (typeof raw === 'string' && raw.trim().startsWith('{')) {
+    try {
+      const data = JSON.parse(raw);
+      return {
+        assign: Array.isArray(data.assign) ? data.assign.map(String).filter(Boolean) : [],
+        receive: Array.isArray(data.receive) ? data.receive.map(String).filter(Boolean) : []
+      };
+    } catch (err) {
+      console.warn('解析團隊 JSON 失敗，回退為舊格式', err);
+    }
+  }
+  const list = parseTeamIdList(raw);
+  return { assign: list, receive: [] };
+}
+
 /* 載入屆別 */
 function loadCohortList() {
   const apiUrl = resolveCheckReviewPeriodsApiUrl();
@@ -326,20 +351,30 @@ function loadCohortList() {
 }
 
 /* 載入團隊：依屆別/班級 */
-function loadTeamList(cohortId, classId, preselectTeamId) {
+function loadTeamList(cohortId, classId, preselectTeams) {
   const ids = Array.isArray(cohortId)
     ? cohortId.filter(Boolean)
     : (cohortId ? [cohortId] : []);
   const classIds = Array.isArray(classId)
     ? classId.filter(Boolean)
     : (classId ? [classId] : []);
-  const desiredSelection = preselectTeamId === undefined
-    ? null
-    : parseTeamIdList(preselectTeamId);
+  let desiredAssign = null;
+  let desiredReceive = null;
+  if (preselectTeams !== undefined) {
+    if (preselectTeams && typeof preselectTeams === 'object' && !Array.isArray(preselectTeams)) {
+      desiredAssign = Array.isArray(preselectTeams.assign) ? preselectTeams.assign : [];
+      desiredReceive = Array.isArray(preselectTeams.receive) ? preselectTeams.receive : [];
+    } else {
+      desiredAssign = parseTeamIdList(preselectTeams);
+      desiredReceive = [];
+    }
+  }
   if (!ids.length) {
     teamPickerState.list = [];
     teamPickerState.summaryMessage = '請先選擇屆別';
-    setTeamSelections([], { keepMessage: true });
+    teamPickerState.receiveSummaryMessage = '請先選擇屆別';
+    setTeamSelections([], { role: 'assign', keepMessage: true });
+    setTeamSelections([], { role: 'receive', keepMessage: true });
     updateTeamSummaryDisplay();
     return;
   }
@@ -358,32 +393,41 @@ function loadTeamList(cohortId, classId, preselectTeamId) {
       teamPickerState.list = Array.isArray(list) ? list : [];
       if (!teamPickerState.list.length) {
         teamPickerState.summaryMessage = '無符合條件的團隊';
-        setTeamSelections([], { keepMessage: true });
+        teamPickerState.receiveSummaryMessage = '無符合條件的團隊';
+        setTeamSelections([], { role: 'assign', keepMessage: true });
+        setTeamSelections([], { role: 'receive', keepMessage: true });
       } else {
-        let nextSelection = desiredSelection && desiredSelection.length
-          ? desiredSelection
-          : [...teamPickerState.selectedIds];
-        nextSelection = nextSelection.filter(id =>
-          teamPickerState.list.some(t => String(t.team_ID) === id)
-        );
+        const availableIds = new Set(teamPickerState.list.map(t => String(t.team_ID)));
 
-        const resolvedPending = teamPickerState.pendingSelections.filter(id =>
-          teamPickerState.list.some(t => String(t.team_ID) === id)
-        );
-        nextSelection = [...new Set([...nextSelection, ...resolvedPending])];
+        const resolveSelection = (current, pending, desired) => {
+          let result = Array.isArray(desired) && desired.length ? desired : [...current];
+          result = result.filter(id => availableIds.has(String(id)));
+          const resolvedPending = (pending || []).filter(id => availableIds.has(String(id)));
+          return [...new Set([...result, ...resolvedPending])];
+        };
 
-        const hasSelection = nextSelection.length > 0;
-        setTeamSelections(nextSelection, { keepMessage: !hasSelection });
-        teamPickerState.summaryMessage = hasSelection ? '' : '請選擇團隊';
+        const nextAssign = resolveSelection(teamPickerState.selectedIds, teamPickerState.pendingSelections, desiredAssign);
+        const nextReceive = resolveSelection(teamPickerState.receiveIds, teamPickerState.pendingReceiveSelections, desiredReceive);
+
+        const hasAssign = nextAssign.length > 0;
+        const hasReceive = nextReceive.length > 0;
+
+        setTeamSelections(nextAssign, { role: 'assign', keepMessage: hasAssign });
+        setTeamSelections(nextReceive, { role: 'receive', keepMessage: hasReceive });
+
+        teamPickerState.summaryMessage = hasAssign ? '' : '請選擇團隊';
+        teamPickerState.receiveSummaryMessage = hasReceive ? '' : '請選擇被評分團隊';
       }
       updateTeamSummaryDisplay();
-      renderTeamModalList();
+      renderTeamModalLists();
     })
     .catch(err => {
         console.error('載入團隊失敗:', err);
         teamPickerState.list = [];
         teamPickerState.summaryMessage = '載入團隊失敗';
-        setTeamSelections([], { keepMessage: true });
+        teamPickerState.receiveSummaryMessage = '載入團隊失敗';
+        setTeamSelections([], { role: 'assign', keepMessage: true });
+        setTeamSelections([], { role: 'receive', keepMessage: true });
         updateTeamSummaryDisplay();
     });
 }
@@ -407,7 +451,7 @@ function setupModeSelector() {
     if (hiddenEl) hiddenEl.value = mode;
     if (hintEl) hintEl.textContent = hint || ' ';
     dropdownInstance?.hide();
-    setTeamPickerEnabled(mode === 'in');
+    applyTeamPickerMode(mode);
   };
 
   document.querySelectorAll('.mode-option').forEach(btn => {
@@ -460,59 +504,122 @@ function setupTeamPicker() {
   updateTeamSummaryDisplay();
 }
 
-function setTeamPickerEnabled(isEnabled) {
-  teamPickerState.enabled = isEnabled;
+function applyTeamPickerMode(mode) {
+  teamPickerState.mode = mode;
   const trigger = document.getElementById('teamPickerTrigger');
+  const receiveField = document.getElementById('receiveTeamField');
+  const receiveTrigger = document.getElementById('receivePickerTrigger');
+  const receiveClear = document.getElementById('receivePickerClear');
+
+  const isSelectable = (mode === 'in' || mode === 'cross');
+  teamPickerState.enabled = isSelectable;
+
   if (trigger) {
-    trigger.setAttribute('aria-disabled', isEnabled ? 'false' : 'true');
-    trigger.style.cursor = isEnabled ? 'pointer' : 'not-allowed';
+    trigger.setAttribute('aria-disabled', isSelectable ? 'false' : 'true');
+    trigger.style.cursor = isSelectable ? 'pointer' : 'not-allowed';
   }
-  if (!isEnabled) {
-    setTeamSelections([], { forceAllLabel: true });
-    teamPickerState.summaryMessage = '僅團隊內互評可指定';
-  } else if (!teamPickerState.list.length) {
-    teamPickerState.summaryMessage = '請先選擇屆別';
+
+  if (receiveField) {
+    receiveField.classList.toggle('d-none', mode !== 'cross');
   }
+  if (receiveTrigger) {
+    receiveTrigger.setAttribute('aria-disabled', mode === 'cross' ? 'false' : 'true');
+    receiveTrigger.style.cursor = mode === 'cross' ? 'pointer' : 'not-allowed';
+  }
+  if (receiveClear) {
+    receiveClear.style.visibility = mode === 'cross' ? 'visible' : 'hidden';
+  }
+
+  if (!isSelectable) {
+    setTeamSelections([], { role: 'assign', forceAllLabel: true });
+    setTeamSelections([], { role: 'receive', forceAllLabel: true });
+    teamPickerState.summaryMessage = '僅指定模式可挑選';
+    teamPickerState.receiveSummaryMessage = '僅指定模式可挑選';
+  } else {
+    if (mode !== 'cross') {
+      setTeamSelections([], { role: 'receive', forceAllLabel: true });
+      teamPickerState.receiveSummaryMessage = '僅團隊間互評可設定';
+    } else if (!teamPickerState.receiveIds.length) {
+      teamPickerState.receiveSummaryMessage = '請選擇被評分團隊';
+    }
+    if (!teamPickerState.list.length) {
+      const placeholder = '請先選擇屆別';
+      teamPickerState.summaryMessage = placeholder;
+      if (mode === 'cross') {
+        teamPickerState.receiveSummaryMessage = placeholder;
+      }
+    } else if (!teamPickerState.selectedIds.length) {
+      teamPickerState.summaryMessage = mode === 'cross' ? '請選擇團隊' : '[所有團隊]';
+    }
+  }
+
+  syncTeamHiddenValue();
   updateTeamSummaryDisplay();
 }
 
 function updateTeamSummaryDisplay() {
-  const summary = document.getElementById('teamPickerSummary');
-  const trigger = document.getElementById('teamPickerTrigger');
-  const clearBtn = document.getElementById('teamPickerClear');
-  const tagsEl = document.getElementById('teamPickerTags');
+  renderPickerDisplay({
+    triggerId: 'teamPickerTrigger',
+    summaryId: 'teamPickerSummary',
+    tagsId: 'teamPickerTags',
+    clearBtnId: 'teamPickerClear',
+    enabled: teamPickerState.enabled,
+    placeholder: teamPickerState.summaryMessage || '[所有團隊]',
+    selections: teamPickerState.selectedIds,
+    role: 'assign',
+    disabledText: teamPickerState.summaryMessage || '僅指定模式可挑選'
+  });
+  renderPickerDisplay({
+    triggerId: 'receivePickerTrigger',
+    summaryId: 'receivePickerSummary',
+    tagsId: 'receivePickerTags',
+    clearBtnId: 'receivePickerClear',
+    enabled: teamPickerState.mode === 'cross' && teamPickerState.enabled,
+    placeholder: teamPickerState.receiveSummaryMessage || '[所有被評分團隊]',
+    selections: teamPickerState.receiveIds,
+    role: 'receive',
+    disabledText: '僅團隊間互評可設定'
+  });
+}
+
+function renderPickerDisplay(config) {
+  const summary = document.getElementById(config.summaryId);
+  const trigger = document.getElementById(config.triggerId);
+  const clearBtn = document.getElementById(config.clearBtnId);
+  const tagsEl = document.getElementById(config.tagsId);
   if (!summary || !trigger || !clearBtn || !tagsEl) return;
 
   trigger.classList.remove('disabled', 'has-value');
   clearBtn.style.visibility = 'hidden';
   tagsEl.innerHTML = '';
 
-  if (!teamPickerState.enabled) {
+  if (!config.enabled) {
     const chip = document.createElement('span');
     chip.className = 'team-chip placeholder';
-    chip.textContent = '僅團隊內互評可指定';
+    chip.textContent = config.disabledText || config.placeholder;
     tagsEl.appendChild(chip);
     trigger.classList.add('disabled');
+    summary.textContent = '';
     return;
   }
 
-  const selectedEntries = teamPickerState.selectedIds
+  const entries = (config.selections || [])
     .map(id => ({
       id,
       name: teamPickerState.list.find(t => String(t.team_ID) === id)?.team_project_name
     }))
     .filter(entry => entry.name);
 
-  if (!selectedEntries.length) {
+  if (!entries.length) {
     const chip = document.createElement('span');
     chip.className = 'team-chip placeholder';
-    chip.textContent = teamPickerState.summaryMessage || '[所有團隊]';
+    chip.textContent = config.placeholder;
     tagsEl.appendChild(chip);
     summary.textContent = '';
     return;
   }
 
-  selectedEntries.forEach(entry => {
+  entries.forEach(entry => {
     const chip = document.createElement('span');
     chip.className = 'team-chip';
     chip.textContent = entry.name;
@@ -521,11 +628,13 @@ function updateTeamSummaryDisplay() {
     remove.textContent = '×';
     remove.addEventListener('click', (e) => {
       e.stopPropagation();
-      setTeamSelections(teamPickerState.selectedIds.filter(id => id !== entry.id));
+      const filtered = config.selections.filter(id => id !== entry.id);
+      setTeamSelections(filtered, { role: config.role });
     });
     chip.appendChild(remove);
     tagsEl.appendChild(chip);
   });
+
   trigger.classList.add('has-value');
   clearBtn.style.visibility = 'visible';
   summary.textContent = '';
@@ -623,35 +732,69 @@ function renderTeamModalList() {
 }
 
 function setTeamSelections(values, options = {}) {
-  const hidden = document.getElementById('team_input');
-  const summaryDefault = '[所有團隊]';
+  const role = options.role === 'receive' ? 'receive' : 'assign';
+  const summaryDefault = role === 'receive' ? '[所有被評分團隊]' : '[所有團隊]';
   const arr = Array.isArray(values)
     ? [...new Set(values.map(String).filter(Boolean))]
     : (!values || values === 'ALL') ? [] : [String(values)];
 
-  if (hidden) hidden.value = arr.length ? arr.join(',') : 'ALL';
+  const stateKey = role === 'receive' ? 'receiveIds' : 'selectedIds';
+  const pendingKey = role === 'receive' ? 'pendingReceiveSelections' : 'pendingSelections';
 
   if (!arr.length) {
-    teamPickerState.selectedIds = [];
-    teamPickerState.pendingSelections = [];
-    if (options.forceAllLabel) {
-      teamPickerState.summaryMessage = summaryDefault;
-    } else if (!options.keepMessage || !teamPickerState.summaryMessage) {
-      teamPickerState.summaryMessage = summaryDefault;
+    teamPickerState[stateKey] = [];
+    teamPickerState[pendingKey] = [];
+    if (role === 'receive') {
+      if (options.forceAllLabel) {
+        teamPickerState.receiveSummaryMessage = summaryDefault;
+      } else if (!options.keepMessage || !teamPickerState.receiveSummaryMessage) {
+        teamPickerState.receiveSummaryMessage = summaryDefault;
+      }
+    } else {
+      if (options.forceAllLabel) {
+        teamPickerState.summaryMessage = summaryDefault;
+      } else if (!options.keepMessage || !teamPickerState.summaryMessage) {
+        teamPickerState.summaryMessage = summaryDefault;
+      }
     }
     updateTeamSummaryDisplay();
+    syncTeamHiddenValue();
     return;
   }
 
   const available = arr.filter(id => teamPickerState.list.some(t => String(t.team_ID) === id));
   const missing = arr.filter(id => !available.includes(id));
 
-  teamPickerState.selectedIds = available;
-  teamPickerState.pendingSelections = missing;
+  teamPickerState[stateKey] = available;
+  teamPickerState[pendingKey] = missing;
   if (!options.keepMessage) {
-    teamPickerState.summaryMessage = '';
+    if (role === 'receive') {
+      teamPickerState.receiveSummaryMessage = '';
+    } else {
+      teamPickerState.summaryMessage = '';
+    }
   }
   updateTeamSummaryDisplay();
+  syncTeamHiddenValue();
+}
+
+function syncTeamHiddenValue() {
+  const hidden = document.getElementById('team_input');
+  if (!hidden) return;
+  const assign = teamPickerState.selectedIds || [];
+  const receive = teamPickerState.receiveIds || [];
+  if (teamPickerState.mode === 'cross') {
+    if (!assign.length && !receive.length) {
+      hidden.value = 'ALL';
+      return;
+    }
+    hidden.value = JSON.stringify({
+      assign,
+      receive
+    });
+    return;
+  }
+  hidden.value = assign.length ? assign.join(',') : 'ALL';
 }
 
 /* 載入資料表 */
