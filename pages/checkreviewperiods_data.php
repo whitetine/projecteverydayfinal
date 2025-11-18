@@ -4,6 +4,250 @@ require '../includes/pdo.php';
 
 $sort = $_REQUEST['sort'] ?? 'created';
 
+function parseTeamTarget($raw) {
+    $result = [
+        'assign' => [],
+        'receive' => [],
+        'is_all' => false
+    ];
+    if (!$raw || strtoupper(trim($raw)) === 'ALL') {
+        $result['is_all'] = true;
+        return $result;
+    }
+    $trimmed = trim((string)$raw);
+    if ($trimmed !== '' && $trimmed[0] === '{') {
+        $decoded = json_decode($trimmed, true);
+        if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+            $result['assign'] = array_values(array_filter(array_map('strval', $decoded['assign'] ?? [])));
+            $result['receive'] = array_values(array_filter(array_map('strval', $decoded['receive'] ?? [])));
+            return $result;
+        }
+    }
+    $assignList = array_filter(array_map('trim', explode(',', $raw)), function($v){ return $v !== ''; });
+    $result['assign'] = array_values(array_map('strval', $assignList));
+    return $result;
+}
+
+function normalizeIdList($raw) {
+    if (!$raw) return [];
+    if (is_array($raw)) {
+        $items = $raw;
+    } else {
+        $items = preg_split('/[,\s]+/', (string)$raw);
+    }
+    $ids = [];
+    foreach ($items as $item) {
+        $item = trim((string)$item);
+        if ($item === '') continue;
+        if (!is_numeric($item)) continue;
+        $ids[] = (int)$item;
+    }
+    return array_values(array_unique($ids));
+}
+
+function getPostedCohortIdList() {
+    $list = normalizeIdList($_POST['cohort_values'] ?? null);
+    if (!$list) {
+        $fallback = resolvePostedCohortId();
+        if ($fallback) $list = [(int)$fallback];
+    }
+    return $list;
+}
+
+function getPostedClassIdList() {
+    $raw = $_POST['pe_class_ID'] ?? null;
+    $list = normalizeIdList($raw);
+    return $list;
+}
+
+function tableExists(PDO $conn, $tableName) {
+    static $cache = [];
+    if (isset($cache[$tableName])) return $cache[$tableName];
+    try {
+        $quoted = $conn->quote($tableName);
+        $stmt = $conn->query("SHOW TABLES LIKE {$quoted}");
+        $cache[$tableName] = $stmt && $stmt->rowCount() > 0;
+    } catch (Exception $e) {
+        $cache[$tableName] = false;
+    }
+    return $cache[$tableName];
+}
+
+function teamTableColumns(PDO $conn) {
+    static $columns = null;
+    if ($columns !== null) return $columns;
+    $columns = [];
+    try {
+        $stmt = $conn->query("SHOW COLUMNS FROM teamdata");
+        if ($stmt) {
+            foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $col) {
+                $columns[$col['Field']] = true;
+            }
+        }
+    } catch (Exception $e) {
+        $columns = [];
+    }
+    return $columns;
+}
+
+function teamColumnExists(PDO $conn, $column) {
+    $columns = teamTableColumns($conn);
+    return isset($columns[$column]);
+}
+
+function fetchTeamInfoByIds(PDO $conn, array $teamIds) {
+    if (!$teamIds) return [];
+    $teamIds = array_values(array_unique(array_filter(array_map('intval', $teamIds))));
+    if (!$teamIds) return [];
+    $columns = ['team_ID'];
+    if (teamColumnExists($conn, 'class_ID')) $columns[] = 'class_ID';
+    if (teamColumnExists($conn, 'cohort_ID')) $columns[] = 'cohort_ID';
+    if (teamColumnExists($conn, 'team_project_name')) $columns[] = 'team_project_name';
+    if (teamColumnExists($conn, 'team_status')) $columns[] = 'team_status';
+    $columnSql = implode(', ', array_unique($columns));
+    $placeholders = implode(',', array_fill(0, count($teamIds), '?'));
+    $sql = "SELECT {$columnSql} FROM teamdata WHERE team_ID IN ({$placeholders})";
+    if (teamColumnExists($conn, 'team_status')) {
+        $sql .= " AND team_status = 1";
+    }
+    $stmt = $conn->prepare($sql);
+    $stmt->execute($teamIds);
+    $map = [];
+    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+        $map[(string)$row['team_ID']] = $row;
+    }
+    return $map;
+}
+
+function fetchTeamsByFilters(PDO $conn, array $cohortIds, array $classIds) {
+    $columns = ['team_ID'];
+    if (teamColumnExists($conn, 'class_ID')) $columns[] = 'class_ID';
+    if (teamColumnExists($conn, 'cohort_ID')) $columns[] = 'cohort_ID';
+    if (teamColumnExists($conn, 'team_project_name')) $columns[] = 'team_project_name';
+    if (teamColumnExists($conn, 'team_status')) $columns[] = 'team_status';
+    $columnSql = implode(', ', array_unique($columns));
+    $sql = "SELECT {$columnSql} FROM teamdata";
+    $conditions = [];
+    $params = [];
+    if (teamColumnExists($conn, 'team_status')) {
+        $conditions[] = "team_status = 1";
+    }
+    if ($cohortIds && teamColumnExists($conn, 'cohort_ID')) {
+        $placeholders = implode(',', array_fill(0, count($cohortIds), '?'));
+        $conditions[] = "cohort_ID IN ({$placeholders})";
+        $params = array_merge($params, $cohortIds);
+    }
+    if ($classIds && teamColumnExists($conn, 'class_ID')) {
+        $placeholders = implode(',', array_fill(0, count($classIds), '?'));
+        $conditions[] = "class_ID IN ({$placeholders})";
+        $params = array_merge($params, $classIds);
+    }
+    if ($conditions) {
+        $sql .= ' WHERE ' . implode(' AND ', $conditions);
+    }
+    $stmt = $conn->prepare($sql);
+    $stmt->execute($params);
+    $map = [];
+    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+        $map[(string)$row['team_ID']] = $row;
+    }
+    return $map;
+}
+
+function fetchPeriodTargetTeams(PDO $conn, array $periodIds) {
+    if (!$periodIds || !tableExists($conn, 'petargetdata')) {
+        return [];
+    }
+    $periodIds = array_values(array_unique(array_filter(array_map('intval', $periodIds))));
+    if (!$periodIds) return [];
+    $placeholders = implode(',', array_fill(0, count($periodIds), '?'));
+    $stmt = $conn->prepare("SELECT period_ID, pe_team_ID FROM petargetdata WHERE period_ID IN ($placeholders)");
+    $stmt->execute($periodIds);
+    $map = [];
+    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+        $pid = (int)$row['period_ID'];
+        if (!isset($map[$pid])) $map[$pid] = [];
+        $teamId = $row['pe_team_ID'];
+        if ($teamId !== null) {
+            $map[$pid][] = (int)$teamId;
+        }
+    }
+    return $map;
+}
+
+function determineTargetTeams(PDO $conn, array $payload, array $cohortIds, array $classIds) {
+    $targetIds = $payload['receive'];
+    if (!$targetIds) {
+        $targetIds = $payload['assign'];
+    }
+    if ($targetIds) {
+        $teams = fetchTeamInfoByIds($conn, $targetIds);
+        if ($teams) return $teams;
+    }
+    if ($payload['is_all'] || empty($targetIds)) {
+        return fetchTeamsByFilters($conn, $cohortIds, $classIds);
+    }
+    return [];
+}
+
+function syncPeriodTargets(PDO $conn, $periodId, $rawTargetValue, array $cohortIds, array $classIds) {
+    if (!$periodId || !tableExists($conn, 'petargetdata')) {
+        return;
+    }
+    $payload = parseTeamTarget($rawTargetValue);
+    $targets = determineTargetTeams($conn, $payload, $cohortIds, $classIds);
+    $conn->prepare("DELETE FROM petargetdata WHERE period_ID=?")->execute([$periodId]);
+    if (!$targets) {
+        return;
+    }
+    $columns = ['period_ID', 'pe_team_ID'];
+    $valuesTemplate = '(?, ?';
+    $includeClass = teamColumnExists($conn, 'class_ID');
+    $includeCohort = teamColumnExists($conn, 'cohort_ID');
+    $includeGrade = false; // 目前無資料來源
+    if ($includeClass) { $columns[] = 'pe_class_ID'; $valuesTemplate .= ', ?'; }
+    if ($includeCohort) { $columns[] = 'pe_cohort_ID'; $valuesTemplate .= ', ?'; }
+    if ($includeGrade) { $columns[] = 'pe_grade_no'; $valuesTemplate .= ', ?'; }
+    $valuesTemplate .= ')';
+    $columnSql = implode(', ', $columns);
+    $sql = "INSERT INTO petargetdata ({$columnSql}) VALUES {$valuesTemplate}";
+    $stmt = $conn->prepare($sql);
+    foreach ($targets as $info) {
+        $params = [$periodId, $info['team_ID']];
+        if ($includeClass) $params[] = $info['class_ID'] ?? null;
+        if ($includeCohort) $params[] = $info['cohort_ID'] ?? null;
+        if ($includeGrade) $params[] = $info['grade_no'] ?? null;
+        $stmt->execute($params);
+    }
+}
+
+function describeTeamSelection(array $payload, string $role, array $teamNameMap) {
+    $isAll = !empty($payload['is_all']);
+    if ($role === 'assign') {
+        if ($isAll) return '全部 (ALL)';
+    } else {
+        if ($isAll) return 'ALL';
+    }
+    $ids = $payload[$role] ?? [];
+    if (!$ids || !count($ids)) {
+        return $role === 'receive' ? 'ALL' : '－';
+    }
+    $labels = [];
+    foreach ($ids as $id) {
+        $key = (string)$id;
+        if (isset($teamNameMap[$key])) {
+            $labels[] = $teamNameMap[$key];
+        }
+    }
+    if (count($labels) === 1) {
+        return $labels[0];
+    }
+    if (!count($labels)) {
+        return count($ids) > 1 ? '多個團隊' : $ids[0];
+    }
+    return '多個團隊 (' . count($labels) . ')';
+}
+
 function resolvePostedCohortId() {
     $primary = $_POST['cohort_primary'] ?? null;
     $raw = $_POST['cohort_ID'] ?? null;
@@ -90,6 +334,10 @@ if ($_POST['action'] ?? '' === 'create') {
 
     $stmt = $conn->prepare($sql);
     $stmt->execute($values);
+    $newPeriodId = (int)$conn->lastInsertId();
+    $cohortList = getPostedCohortIdList();
+    $classList = getPostedClassIdList();
+    syncPeriodTargets($conn, $newPeriodId, $_POST['pe_target_ID'] ?? '', $cohortList, $classList);
     
     // 如果是 AJAX 請求，返回 JSON；否則重定向
     if (isset($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') {
@@ -150,6 +398,9 @@ if ($_POST['action'] ?? '' === 'update') {
 
     $stmt = $conn->prepare($sql);
     $stmt->execute($values);
+    $cohortList = getPostedCohortIdList();
+    $classList = getPostedClassIdList();
+    syncPeriodTargets($conn, (int)($_POST['period_ID'] ?? 0), $_POST['pe_target_ID'] ?? '', $cohortList, $classList);
     
     // 如果是 AJAX 請求，返回 JSON；否則重定向
     if (isset($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') {
@@ -166,6 +417,23 @@ if ($_POST['action'] ?? '' === 'delete') {
     $stmt = $conn->prepare("DELETE FROM perioddata WHERE period_ID=?");
     $stmt->execute([$_POST['period_ID']]);
     header("Location: checkreviewperiods.php?sort=$sort");
+    exit;
+}
+
+if ($_POST['action'] ?? '' === 'toggle_status') {
+    $periodId = (int)($_POST['period_ID'] ?? 0);
+    $targetStatus = (int)($_POST['target_status'] ?? 0) === 1 ? 1 : 0;
+    $success = false;
+    if ($periodId > 0) {
+        $stmt = $conn->prepare("UPDATE perioddata SET pe_status=? WHERE period_ID=?");
+        $success = $stmt->execute([$targetStatus, $periodId]);
+    }
+    header('Content-Type: application/json; charset=utf-8');
+    echo json_encode([
+        'success' => $success,
+        'status' => $targetStatus,
+        'period_ID' => $periodId
+    ]);
     exit;
 }
 
@@ -337,6 +605,53 @@ $stmt = $conn->prepare($sql);
 $stmt->execute();
 $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
+/* 解析團隊資訊以供顯示 */
+$periodIdList = array_values(array_unique(array_map(function ($item) {
+    return (int)($item['period_ID'] ?? 0);
+}, $rows)));
+$periodTargetMap = fetchPeriodTargetTeams($conn, $periodIdList);
+
+$teamIdSet = [];
+foreach ($rows as &$rowItem) {
+    $payload = parseTeamTarget($rowItem['pe_target_ID'] ?? '');
+    $fallbackTargets = $periodTargetMap[(int)($rowItem['period_ID'] ?? 0)] ?? [];
+    if ($fallbackTargets) {
+        $shouldFillReceive = !count($payload['receive']);
+        $shouldFillAssign =
+            !count($payload['assign']) &&
+            !count($payload['receive']) &&
+            $payload['is_all'];
+        if ($shouldFillReceive) {
+            $payload['receive'] = array_map('strval', $fallbackTargets);
+            $payload['is_all'] = false;
+        }
+        if ($shouldFillAssign) {
+            $payload['assign'] = array_map('strval', $fallbackTargets);
+            $payload['is_all'] = false;
+        }
+    }
+    $rowItem['_team_payload'] = $payload;
+    foreach (['assign', 'receive'] as $role) {
+        foreach ($payload[$role] as $teamId) {
+            $teamId = (string)$teamId;
+            if ($teamId !== '') {
+                $teamIdSet[$teamId] = true;
+            }
+        }
+    }
+}
+unset($rowItem);
+
+$teamNameMap = [];
+if (!empty($teamIdSet)) {
+    $placeholders = implode(',', array_fill(0, count($teamIdSet), '?'));
+    $stmtTeam = $conn->prepare("SELECT team_ID, team_project_name FROM teamdata WHERE team_ID IN ($placeholders)");
+    $stmtTeam->execute(array_keys($teamIdSet));
+    foreach ($stmtTeam->fetchAll(PDO::FETCH_ASSOC) as $teamRow) {
+        $teamNameMap[(string)$teamRow['team_ID']] = $teamRow['team_project_name'];
+    }
+}
+
 /* Rank by created */
 $rankByCreated = [];
 $tmp = $rows;
@@ -350,40 +665,41 @@ foreach ($tmp as $r) $rankByCreated[$r['period_ID']] = $i++;
 
 /* 回傳表格 HTML */
 ?>
-<table class="table table-bordered table-striped">
+<table class="table table-bordered table-striped period-table">
   <thead class="table-light">
     <tr>
-      <th>序號</th><th>開始日</th><th>結束日</th><th>標題</th>
-      <th>指定團隊</th><th>屆別</th><th>啟用</th>
-      <th>建立時間</th><th>操作</th>
+      <th>開始日</th>
+      <th>結束日</th>
+      <th>標題</th>
+      <th>指定團隊</th>
+      <th>被評分團隊</th>
+      <th>屆別</th>
+      <th>啟用</th>
+      <th>操作</th>
     </tr>
   </thead>
   <tbody>
 <?php foreach ($rows as $r): ?>
     <tr>
-      <td><?= $rankByCreated[$r['period_ID']] ?? '' ?></td>
       <td><?= htmlspecialchars($r['period_start_d'] ?? '') ?></td>
       <td><?= htmlspecialchars($r['period_end_d'] ?? '') ?></td>
       <td><?= htmlspecialchars($r['period_title'] ?? '') ?></td>
-      <td><?php
-        $targetRaw = $r['pe_target_ID'] ?? '';
-        if ($targetRaw === 'ALL' || $targetRaw === '' || $targetRaw === null) {
-          echo $targetRaw === 'ALL' ? '全部 (ALL)' : '－';
-        } elseif (strpos($targetRaw, ',') !== false) {
-          echo '多個團隊';
-        } elseif (!empty($r['team_project_name'])) {
-          echo htmlspecialchars($r['team_project_name']);
-        } else {
-          echo htmlspecialchars($targetRaw);
-        }
-      ?></td>
+      <td><?= htmlspecialchars(describeTeamSelection($r['_team_payload'], 'assign', $teamNameMap)) ?></td>
+      <td><?= htmlspecialchars(describeTeamSelection($r['_team_payload'], 'receive', $teamNameMap)) ?></td>
       <td><?= 
         ($r['cohort_name'] ?? '') ? 
         htmlspecialchars($r['cohort_name']) . ' (' . htmlspecialchars($r['year_label'] ?? '') . ')' : 
         '－'
       ?></td>
-      <td><?= ($r['pe_status'] ?? 0) ? '✔' : '✘' ?></td>
-      <td><?= htmlspecialchars($r['pe_created_d'] ?? '') ?></td>
+      <td>
+        <?php $isActive = (int)($r['pe_status'] ?? 0) === 1; ?>
+        <button type="button"
+          class="btn btn-sm btn-status-toggle <?= $isActive ? 'btn-success' : 'btn-outline-secondary' ?>"
+          data-period-id="<?= $r['period_ID'] ?>"
+          data-next-status="<?= $isActive ? 0 : 1 ?>">
+          <?= $isActive ? '啟用中' : '已停用' ?>
+        </button>
+      </td>
       <td>
         <button class="btn btn-sm btn-outline-primary" 
           onclick='editRow(<?= json_encode($r, JSON_UNESCAPED_UNICODE) ?>)'>編輯</button>
