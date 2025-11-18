@@ -1,594 +1,310 @@
 <?php
 global $conn;
-$p = $_POST;
+$p = $_POST ?? [];
 $do = $_GET['do'] ?? '';
 
-switch ($do) {
-    // 舊 API（apply.php 用）：啟用檔案列表
-case 'get_all_TemplatesFile':
-    $rows = $conn->query("SELECT * FROM filedata WHERE file_status=1")->fetchAll(PDO::FETCH_ASSOC);
-    header('Content-Type: application/json; charset=utf-8');
-    echo json_encode($rows, JSON_UNESCAPED_UNICODE);   // ← 直接回陣列
+/* -----------------------------------------------------------
+   JSON 輸出
+------------------------------------------------------------ */
+function json_ok($extra = [])
+{
+    echo json_encode(array_merge(['ok' => true], $extra), JSON_UNESCAPED_UNICODE);
     exit;
-
-   case 'get_files':
-      try {
-        $rows = $conn->query("
-            SELECT file_ID, file_name, file_url, file_status, is_top, file_update_d
-            FROM filedata
-            ORDER BY is_top DESC, file_ID DESC     -- ← 重點
-        ")->fetchAll(PDO::FETCH_ASSOC);
-        header('Content-Type: application/json; charset=utf-8');
-        echo json_encode($rows, JSON_UNESCAPED_UNICODE);
-        exit;
-    } catch (Throwable $e) {
-        http_response_code(500);
-        echo json_encode(['status'=>'error','message'=>'資料讀取失敗：'.$e->getMessage()]);
-        exit;
-    }
-    // 狀態/置頂切換
-    case 'update_template':
-        $req = read_json_body();
-        $file_ID     = intval($req['file_ID']     ?? 0);
-        $file_status = intval($req['file_status'] ?? 0); // 0/1
-        $is_top      = intval($req['is_top']      ?? 0); // 0/1
-        if ($file_ID <= 0) json_err('file_ID 無效');
-
-        try {
-            $stmt = $conn->prepare("
-                UPDATE filedata
-                SET file_status = ?, is_top = ?, file_update_d = NOW()
-                WHERE file_ID = ?
-            ");
-            $stmt->execute([$file_status, $is_top, $file_ID]);
-            json_ok();
-        } catch (Throwable $e) {
-            json_err('更新失敗：'.$e->getMessage());
-        }
-        break;
-
-    // 上傳 PDF（相容 f_name 舊欄位）
-    case 'upload_template':
-        $file_name = trim($p['file_name'] ?? ($p['f_name'] ?? ''));
-        if ($file_name === '') json_err('缺少表單名稱');
-        if (empty($_FILES['file']['name'])) json_err('請選擇要上傳的檔案');
-
-        $ext = strtolower(pathinfo($_FILES['file']['name'], PATHINFO_EXTENSION));
-        if ($ext !== 'pdf') json_err('只允許上傳 PDF');
-
-        $dir = __DIR__ . '/../templates';
-        if (!is_dir($dir) && !mkdir($dir, 0775, true)) json_err('伺服器目錄建立失敗');
-
-        $saveName = 'tpl_' . date('Ymd_His') . '_' . bin2hex(random_bytes(3)) . '.pdf';
-        $savePath = $dir . '/' . $saveName;
-
-        if (!move_uploaded_file($_FILES['file']['tmp_name'], $savePath)) {
-            json_err('檔案儲存失敗（權限或磁碟空間不足）');
-        }
-
-        $file_url = 'templates/' . $saveName;
-
-        try {
-            $stmt = $conn->prepare("
-                INSERT INTO filedata (file_name, file_url, file_status, is_top, file_update_d)
-                VALUES (?, ?, 1, 0, NOW())
-            ");
-            $stmt->execute([$file_name, $file_url]);
-            json_ok(['file_ID' => (int)$conn->lastInsertId(), 'file_url' => $file_url]);
-        } catch (Throwable $e) {
-            @unlink($savePath);
-            json_err('資料寫入失敗：'.$e->getMessage());
-        }
-        break;
-
-    // 只取啟用的檔案（apply.php / file.php）- 根據學生資訊過濾
-    case 'listActiveFiles':
-        try {
-            session_start();
-            $u_ID = $_SESSION['u_ID'] ?? '';
-            
-            // 獲取學生的學籍資訊
-            $studentInfo = null;
-            if ($u_ID) {
-                $stmt = $conn->prepare("
-                    SELECT e.cohort_ID, e.class_ID, e.enroll_grade
-                    FROM enrollmentdata e
-                    WHERE e.enroll_u_ID = ? AND e.enroll_status = 1
-                    ORDER BY e.enroll_created_d DESC
-                    LIMIT 1
-                ");
-                $stmt->execute([$u_ID]);
-                $studentInfo = $stmt->fetch(PDO::FETCH_ASSOC);
-            }
-
-            // 獲取所有啟用的文件及其目標範圍
-            $rows = $conn->query("
-                SELECT 
-                    f.file_ID, 
-                    f.file_name, 
-                    f.file_url,
-                    f.is_required,
-                    f.file_start_d,
-                    f.file_end_d
-                FROM filedata f
-                WHERE f.file_status = 1
-                ORDER BY f.is_top DESC, f.file_ID DESC
-            ")->fetchAll(PDO::FETCH_ASSOC);
-
-            // 獲取每個文件的目標範圍並過濾
-            $filteredRows = [];
-            foreach ($rows as $row) {
-                $file_ID = $row['file_ID'];
-                $shouldShow = false;
-
-                // 檢查時間限制
-                $now = date('Y-m-d H:i:s');
-                if (!empty($row['file_start_d']) && $row['file_start_d'] > $now) {
-                    continue; // 尚未開放
-                }
-                if (!empty($row['file_end_d']) && $row['file_end_d'] < $now) {
-                    continue; // 已過期
-                }
-
-                // 檢查目標範圍
-                try {
-                    $targets = $conn->query("
-                        SELECT file_target_type, file_target_ID
-                        FROM filetargetdata
-                        WHERE file_ID = $file_ID
-                    ")->fetchAll(PDO::FETCH_ASSOC);
-
-                    if (empty($targets)) {
-                        // 如果沒有設定目標範圍，預設顯示給所有人
-                        $shouldShow = true;
-                    } else {
-                        foreach ($targets as $target) {
-                            if ($target['file_target_type'] === 'ALL') {
-                                $shouldShow = true;
-                                break;
-                            } elseif ($studentInfo) {
-                                if ($target['file_target_type'] === 'COHORT' && 
-                                    $target['file_target_ID'] == $studentInfo['cohort_ID']) {
-                                    $shouldShow = true;
-                                    break;
-                                } elseif ($target['file_target_type'] === 'GRADE' && 
-                                         $target['file_target_ID'] == $studentInfo['enroll_grade']) {
-                                    $shouldShow = true;
-                                    break;
-                                } elseif ($target['file_target_type'] === 'CLASS' && 
-                                         $target['file_target_ID'] == $studentInfo['class_ID']) {
-                                    $shouldShow = true;
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                } catch (Exception $e) {
-                    // 如果表不存在，預設顯示
-                    $shouldShow = true;
-                }
-
-                if ($shouldShow) {
-                    $filteredRows[] = $row;
-                }
-            }
-
-            header('Content-Type: application/json; charset=utf-8');
-            echo json_encode($filteredRows, JSON_UNESCAPED_UNICODE);
-            exit;
-        } catch (Throwable $e) {
-            http_response_code(500);
-            echo json_encode(['status'=>'error','message'=>'資料讀取失敗：'.$e->getMessage()]);
-            exit;
-        }
-
-    // 獲取文件及其目標範圍
-    case 'get_files_with_targets':
-        try {
-            // 檢查欄位是否存在，如果不存在則使用預設值
-            $hasFileDes = false;
-            $hasIsRequired = false;
-            $hasFileStartD = false;
-            $hasFileEndD = false;
-            
-            try {
-                $test = $conn->query("SELECT file_des FROM filedata LIMIT 1");
-                $hasFileDes = true;
-            } catch (Exception $e) {}
-            
-            try {
-                $test = $conn->query("SELECT is_required FROM filedata LIMIT 1");
-                $hasIsRequired = true;
-            } catch (Exception $e) {}
-            
-            try {
-                $test = $conn->query("SELECT file_start_d FROM filedata LIMIT 1");
-                $hasFileStartD = true;
-            } catch (Exception $e) {}
-            
-            try {
-                $test = $conn->query("SELECT file_end_d FROM filedata LIMIT 1");
-                $hasFileEndD = true;
-            } catch (Exception $e) {}
-            
-            // 構建 SQL 查詢
-            $selectFields = "f.file_ID, f.file_name, f.file_url, f.file_status, f.is_top, f.file_update_d";
-            
-            if ($hasFileDes) {
-                $selectFields .= ", COALESCE(f.file_des, '') as file_des";
-            } else {
-                $selectFields .= ", '' as file_des";
-            }
-            
-            if ($hasIsRequired) {
-                $selectFields .= ", COALESCE(f.is_required, 0) as is_required";
-            } else {
-                $selectFields .= ", 0 as is_required";
-            }
-            
-            if ($hasFileStartD) {
-                $selectFields .= ", f.file_start_d";
-            } else {
-                $selectFields .= ", NULL as file_start_d";
-            }
-            
-            if ($hasFileEndD) {
-                $selectFields .= ", f.file_end_d";
-            } else {
-                $selectFields .= ", NULL as file_end_d";
-            }
-            
-            $rows = $conn->query("
-                SELECT $selectFields
-                FROM filedata f
-                ORDER BY f.is_top DESC, f.file_ID DESC
-            ")->fetchAll(PDO::FETCH_ASSOC);
-
-            // 檢查 filetargetdata 表是否存在
-            $hasFiletargetTable = false;
-            try {
-                $test = $conn->query("SELECT 1 FROM filetargetdata LIMIT 1");
-                $hasFiletargetTable = true;
-            } catch (Exception $e) {
-                $hasFiletargetTable = false;
-            }
-
-            // 獲取每個文件的目標範圍
-            foreach ($rows as &$row) {
-                $file_ID = $row['file_ID'];
-                
-                $row['target_all'] = false;
-                $row['target_cohorts'] = [];
-                $row['target_grades'] = [];
-                $row['target_classes'] = [];
-                
-                if ($hasFiletargetTable) {
-                    try {
-                        $stmt = $conn->prepare("
-                            SELECT file_target_type, file_target_ID
-                            FROM filetargetdata
-                            WHERE file_ID = ?
-                        ");
-                        $stmt->execute([$file_ID]);
-                        $targets = $stmt->fetchAll(PDO::FETCH_ASSOC);
-                        
-                        foreach ($targets as $target) {
-                            if ($target['file_target_type'] === 'ALL') {
-                                $row['target_all'] = true;
-                            } elseif ($target['file_target_type'] === 'COHORT') {
-                                $row['target_cohorts'][] = $target['file_target_ID'];
-                            } elseif ($target['file_target_type'] === 'GRADE') {
-                                $row['target_grades'][] = $target['file_target_ID'];
-                            } elseif ($target['file_target_type'] === 'CLASS') {
-                                $row['target_classes'][] = $target['file_target_ID'];
-                            }
-                        }
-                    } catch (Exception $e) {
-                        // 忽略錯誤，使用預設值
-                    }
-                }
-            }
-            unset($row);
-
-            header('Content-Type: application/json; charset=utf-8');
-            echo json_encode($rows, JSON_UNESCAPED_UNICODE);
-            exit;
-        } catch (Throwable $e) {
-            http_response_code(400);
-            echo json_encode(['status'=>'error','message'=>'資料讀取失敗：'.$e->getMessage()]);
-            exit;
-        }
-
-    // 上傳文件並設定目標範圍
-    case 'upload_file_with_targets':
-        $file_name = trim($p['file_name'] ?? '');
-        $file_des = trim($p['file_des'] ?? '');
-        $is_required = intval($p['is_required'] ?? 0);
-        $file_start_d = !empty($p['file_start_d']) ? $p['file_start_d'] : null;
-        $file_end_d = !empty($p['file_end_d']) ? $p['file_end_d'] : null;
-        $target_all = intval($p['target_all'] ?? 0);
-        $target_cohorts = json_decode($p['target_cohorts'] ?? '[]', true) ?: [];
-        $target_grades = json_decode($p['target_grades'] ?? '[]', true) ?: [];
-        $target_classes = json_decode($p['target_classes'] ?? '[]', true) ?: [];
-
-        if ($file_name === '') json_err('缺少表單名稱');
-        if (empty($_FILES['file']['name'])) json_err('請選擇要上傳的檔案');
-
-        $ext = strtolower(pathinfo($_FILES['file']['name'], PATHINFO_EXTENSION));
-        if ($ext !== 'pdf') json_err('只允許上傳 PDF');
-
-        $dir = __DIR__ . '/../templates';
-        if (!is_dir($dir) && !mkdir($dir, 0775, true)) json_err('伺服器目錄建立失敗');
-
-        $saveName = 'tpl_' . date('Ymd_His') . '_' . bin2hex(random_bytes(3)) . '.pdf';
-        $savePath = $dir . '/' . $saveName;
-
-        if (!move_uploaded_file($_FILES['file']['tmp_name'], $savePath)) {
-            json_err('檔案儲存失敗（權限或磁碟空間不足）');
-        }
-
-        $file_url = 'templates/' . $saveName;
-
-        try {
-            $conn->beginTransaction();
-
-            // 檢查並添加新欄位（如果不存在）
-            try {
-                $conn->exec("ALTER TABLE filedata ADD COLUMN file_des TEXT");
-            } catch (Exception $e) {
-                // 欄位已存在，忽略錯誤
-            }
-            try {
-                $conn->exec("ALTER TABLE filedata ADD COLUMN is_required INT DEFAULT 0");
-            } catch (Exception $e) {
-                // 欄位已存在，忽略錯誤
-            }
-            try {
-                $conn->exec("ALTER TABLE filedata ADD COLUMN file_start_d DATETIME");
-            } catch (Exception $e) {
-                // 欄位已存在，忽略錯誤
-            }
-            try {
-                $conn->exec("ALTER TABLE filedata ADD COLUMN file_end_d DATETIME");
-            } catch (Exception $e) {
-                // 欄位已存在，忽略錯誤
-            }
-
-            // 插入文件資料
-            $stmt = $conn->prepare("
-                INSERT INTO filedata (file_name, file_url, file_des, is_required, file_start_d, file_end_d, file_status, is_top, file_update_d)
-                VALUES (?, ?, ?, ?, ?, ?, 1, 0, NOW())
-            ");
-            $stmt->execute([$file_name, $file_url, $file_des, $is_required, $file_start_d, $file_end_d]);
-            $file_ID = (int)$conn->lastInsertId();
-
-            // 創建 filetargetdata 表（如果不存在）
-            try {
-                $conn->exec("
-                    CREATE TABLE IF NOT EXISTS filetargetdata (
-                        file_ID INT NOT NULL,
-                        file_target_type ENUM('ALL','COHORT','GRADE','CLASS','GROUP') NOT NULL,
-                        file_target_ID VARCHAR(50) NOT NULL,
-                        PRIMARY KEY (file_ID, file_target_type, file_target_ID),
-                        FOREIGN KEY (file_ID) REFERENCES filedata(file_ID) ON DELETE CASCADE
-                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
-                ");
-            } catch (Exception $e) {
-                // 表已存在，忽略錯誤
-            }
-
-            // 插入目標範圍
-            if ($target_all) {
-                $stmt = $conn->prepare("
-                    INSERT INTO filetargetdata (file_ID, file_target_type, file_target_ID)
-                    VALUES (?, 'ALL', '1')
-                    ON DUPLICATE KEY UPDATE file_target_ID = '1'
-                ");
-                $stmt->execute([$file_ID]);
-            } else {
-                foreach ($target_cohorts as $cohort_ID) {
-                    $stmt = $conn->prepare("
-                        INSERT INTO filetargetdata (file_ID, file_target_type, file_target_ID)
-                        VALUES (?, 'COHORT', ?)
-                        ON DUPLICATE KEY UPDATE file_target_ID = ?
-                    ");
-                    $stmt->execute([$file_ID, $cohort_ID, $cohort_ID]);
-                }
-                foreach ($target_grades as $grade) {
-                    $stmt = $conn->prepare("
-                        INSERT INTO filetargetdata (file_ID, file_target_type, file_target_ID)
-                        VALUES (?, 'GRADE', ?)
-                        ON DUPLICATE KEY UPDATE file_target_ID = ?
-                    ");
-                    $stmt->execute([$file_ID, $grade, $grade]);
-                }
-                foreach ($target_classes as $class_ID) {
-                    $stmt = $conn->prepare("
-                        INSERT INTO filetargetdata (file_ID, file_target_type, file_target_ID)
-                        VALUES (?, 'CLASS', ?)
-                        ON DUPLICATE KEY UPDATE file_target_ID = ?
-                    ");
-                    $stmt->execute([$file_ID, $class_ID, $class_ID]);
-                }
-            }
-
-            $conn->commit();
-            json_ok(['file_ID' => $file_ID, 'file_url' => $file_url]);
-        } catch (Throwable $e) {
-            $conn->rollBack();
-            @unlink($savePath);
-            json_err('資料寫入失敗：'.$e->getMessage());
-        }
-        break;
-
-    // 更新文件及其目標範圍
-    case 'update_file_with_targets':
-        $file_ID = intval($p['file_ID'] ?? 0);
-        if ($file_ID <= 0) json_err('file_ID 無效');
-
-        $file_name = trim($p['file_name'] ?? '');
-        $file_des = trim($p['file_des'] ?? '');
-        $is_required = intval($p['is_required'] ?? 0);
-        $file_start_d = !empty($p['file_start_d']) ? $p['file_start_d'] : null;
-        $file_end_d = !empty($p['file_end_d']) ? $p['file_end_d'] : null;
-        $target_all = intval($p['target_all'] ?? 0);
-        $target_cohorts = json_decode($p['target_cohorts'] ?? '[]', true) ?: [];
-        $target_grades = json_decode($p['target_grades'] ?? '[]', true) ?: [];
-        $target_classes = json_decode($p['target_classes'] ?? '[]', true) ?: [];
-
-        if ($file_name === '') json_err('缺少表單名稱');
-
-        try {
-            $conn->beginTransaction();
-
-            // 更新文件資料
-            $updateFields = ['file_name = ?', 'file_des = ?', 'is_required = ?', 'file_start_d = ?', 'file_end_d = ?', 'file_update_d = NOW()'];
-            $updateValues = [$file_name, $file_des, $is_required, $file_start_d, $file_end_d];
-
-            // 如果有新檔案，處理上傳
-            if (!empty($_FILES['file']['name'])) {
-                $ext = strtolower(pathinfo($_FILES['file']['name'], PATHINFO_EXTENSION));
-                if ($ext !== 'pdf') {
-                    $conn->rollBack();
-                    json_err('只允許上傳 PDF');
-                }
-
-                $dir = __DIR__ . '/../templates';
-                $saveName = 'tpl_' . date('Ymd_His') . '_' . bin2hex(random_bytes(3)) . '.pdf';
-                $savePath = $dir . '/' . $saveName;
-
-                if (!move_uploaded_file($_FILES['file']['tmp_name'], $savePath)) {
-                    $conn->rollBack();
-                    json_err('檔案儲存失敗');
-                }
-
-                $file_url = 'templates/' . $saveName;
-                $updateFields[] = 'file_url = ?';
-                $updateValues[] = $file_url;
-            }
-
-            $updateValues[] = $file_ID;
-
-            $stmt = $conn->prepare("
-                UPDATE filedata
-                SET " . implode(', ', $updateFields) . "
-                WHERE file_ID = ?
-            ");
-            $stmt->execute($updateValues);
-
-            // 刪除舊的目標範圍
-            $stmt = $conn->prepare("DELETE FROM filetargetdata WHERE file_ID = ?");
-            $stmt->execute([$file_ID]);
-
-            // 插入新的目標範圍
-            if ($target_all) {
-                $stmt = $conn->prepare("
-                    INSERT INTO filetargetdata (file_ID, file_target_type, file_target_ID)
-                    VALUES (?, 'ALL', '1')
-                ");
-                $stmt->execute([$file_ID]);
-            } else {
-                foreach ($target_cohorts as $cohort_ID) {
-                    $stmt = $conn->prepare("
-                        INSERT INTO filetargetdata (file_ID, file_target_type, file_target_ID)
-                        VALUES (?, 'COHORT', ?)
-                    ");
-                    $stmt->execute([$file_ID, $cohort_ID]);
-                }
-                foreach ($target_grades as $grade) {
-                    $stmt = $conn->prepare("
-                        INSERT INTO filetargetdata (file_ID, file_target_type, file_target_ID)
-                        VALUES (?, 'GRADE', ?)
-                    ");
-                    $stmt->execute([$file_ID, $grade]);
-                }
-                foreach ($target_classes as $class_ID) {
-                    $stmt = $conn->prepare("
-                        INSERT INTO filetargetdata (file_ID, file_target_type, file_target_ID)
-                        VALUES (?, 'CLASS', ?)
-                    ");
-                    $stmt->execute([$file_ID, $class_ID]);
-                }
-            }
-
-            $conn->commit();
-            json_ok();
-        } catch (Throwable $e) {
-            $conn->rollBack();
-            json_err('更新失敗：'.$e->getMessage());
-        }
-        break;
-
-    // 刪除文件
-    case 'delete_file':
-        $req = read_json_body();
-        $file_ID = intval($req['file_ID'] ?? 0);
-        if ($file_ID <= 0) json_err('file_ID 無效');
-
-        try {
-            $conn->beginTransaction();
-
-            // 獲取文件路徑以便刪除檔案
-            $stmt = $conn->prepare("SELECT file_url FROM filedata WHERE file_ID = ?");
-            $stmt->execute([$file_ID]);
-            $file = $stmt->fetch(PDO::FETCH_ASSOC);
-
-            // 刪除資料庫記錄（CASCADE 會自動刪除 filetargetdata）
-            $stmt = $conn->prepare("DELETE FROM filedata WHERE file_ID = ?");
-            $stmt->execute([$file_ID]);
-
-            // 刪除實體檔案
-            if ($file && !empty($file['file_url'])) {
-                $filePath = __DIR__ . '/../' . $file['file_url'];
-                if (file_exists($filePath)) {
-                    @unlink($filePath);
-                }
-            }
-
-            $conn->commit();
-            json_ok();
-        } catch (Throwable $e) {
-            $conn->rollBack();
-            json_err('刪除失敗：'.$e->getMessage());
-        }
-        break;
-
-    // 批量刪除文件
-    case 'batch_delete_files':
-        $req = read_json_body();
-        $file_IDs = $req['file_IDs'] ?? [];
-        if (!is_array($file_IDs) || empty($file_IDs)) json_err('請選擇要刪除的文件');
-
-        $file_IDs = array_map('intval', $file_IDs);
-        $placeholders = implode(',', array_fill(0, count($file_IDs), '?'));
-
-        try {
-            $conn->beginTransaction();
-
-            // 獲取文件路徑
-            $stmt = $conn->prepare("SELECT file_url FROM filedata WHERE file_ID IN ($placeholders)");
-            $stmt->execute($file_IDs);
-            $files = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-            // 刪除資料庫記錄
-            $stmt = $conn->prepare("DELETE FROM filedata WHERE file_ID IN ($placeholders)");
-            $stmt->execute($file_IDs);
-
-            // 刪除實體檔案
-            foreach ($files as $file) {
-                if (!empty($file['file_url'])) {
-                    $filePath = __DIR__ . '/../' . $file['file_url'];
-                    if (file_exists($filePath)) {
-                        @unlink($filePath);
-                    }
-                }
-            }
-
-            $conn->commit();
-            json_ok(['deleted_count' => count($file_IDs)]);
-        } catch (Throwable $e) {
-            $conn->rollBack();
-            json_err('批量刪除失敗：'.$e->getMessage());
-        }
-        break;
 }
+function json_err($msg)
+{
+    http_response_code(400);
+    echo json_encode(['ok' => false, 'message' => $msg], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
+/* -----------------------------------------------------------
+   取得文件、目標
+------------------------------------------------------------ */
+if ($do === 'get_files_with_targets') {
+
+    $rows = $conn->query("
+        SELECT 
+            doc_ID,
+            doc_name,
+            doc_des,
+            doc_example,
+            is_required,
+            doc_start_d,
+            doc_end_d,
+            doc_status,
+            is_top,
+            doc_created_d
+        FROM docdata
+        ORDER BY is_top DESC, doc_ID DESC
+    ")->fetchAll(PDO::FETCH_ASSOC);
+
+    foreach ($rows as &$row) {
+        $doc_ID = $row['doc_ID'];
+
+        $t = $conn->prepare("
+            SELECT doc_target_type, doc_target_ID
+            FROM doctargetdata
+            WHERE doc_ID=?
+        ");
+        $t->execute([$doc_ID]);
+        $targets = $t->fetchAll(PDO::FETCH_ASSOC);
+
+        $row['target_all'] = false;
+        $row['target_cohorts'] = [];
+        $row['target_grades'] = [];
+        $row['target_classes'] = [];
+
+        foreach ($targets as $tg) {
+            if ($tg['doc_target_type'] === 'COHORT') {
+                $row['target_cohorts'][] = $tg['doc_target_ID'];
+            } elseif ($tg['doc_target_type'] === 'GRADE') {
+                $row['target_grades'][] = $tg['doc_target_ID'];
+            } elseif ($tg['doc_target_type'] === 'CLASS') {
+                $row['target_classes'][] = $tg['doc_target_ID'];
+            } elseif ($tg['doc_target_type'] === 'ALL') {
+                $row['target_all'] = true;
+            }
+        }
+    }
+
+    header("Content-Type: application/json; charset=utf-8");
+    echo json_encode($rows, JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
+if ($do === 'upload_file_with_targets') {
+
+    $doc_name = trim($p['doc_name'] ?? '');
+    $doc_des = trim($p['doc_des'] ?? '');
+    $is_required = intval($p['is_required'] ?? 0);
+    $doc_start_d = $p['doc_start_d'] ?: null;
+    $doc_end_d = $p['doc_end_d'] ?: null;
+
+    if ($doc_name === '')
+        json_err("缺少文件名稱");
+
+    if (empty($_FILES['doc_example']['name']))
+        json_err("請選擇 PDF 檔案");
+
+    // 取得 targets
+    $cohorts = json_decode($p['target_cohorts'] ?? '[]', true);
+    $grades = json_decode($p['target_grades'] ?? '[]', true);
+    $classes = json_decode($p['target_classes'] ?? '[]', true);
+
+    /* 上傳 PDF */
+    $ext = strtolower(pathinfo($_FILES['doc_example']['name'], PATHINFO_EXTENSION));
+    if ($ext !== 'pdf')
+        json_err("只允許上傳 PDF");
+
+    $dir = __DIR__ . '/../templates';
+    if (!is_dir($dir))
+        mkdir($dir, 0775, true);
+
+    $saveName = 'doc_' . date('Ymd_His') . '_' . bin2hex(random_bytes(3)) . '.pdf';
+    $savePath = $dir . '/' . $saveName;
+
+    if (!move_uploaded_file($_FILES['doc_example']['tmp_name'], $savePath))
+        json_err("PDF 儲存失敗");
+
+    $file_url = 'templates/' . $saveName;
+
+    try {
+        $conn->beginTransaction();
+
+        // 建立 doc
+        $stmt = $conn->prepare("
+            INSERT INTO docdata
+            (doc_name, doc_des, doc_example, is_required, doc_start_d, doc_end_d,
+             doc_status, is_top, doc_u_ID, doc_created_d)
+            VALUES (?, ?, ?, ?, ?, ?, 1, 0, 0, NOW())
+        ");
+        $stmt->execute([
+            $doc_name,
+            $doc_des,
+            $file_url,
+            $is_required,
+            $doc_start_d,
+            $doc_end_d
+        ]);
+
+        $doc_ID = intval($conn->lastInsertId());
+
+        // 插入目標
+        $insert = $conn->prepare("
+            INSERT INTO doctargetdata (doc_ID, doc_target_type, doc_target_ID)
+            VALUES (?, ?, ?)
+        ");
+
+        foreach ($cohorts as $id)
+            $insert->execute([$doc_ID, 'COHORT', $id]);
+
+        foreach ($grades as $id)
+            $insert->execute([$doc_ID, 'GRADE', $id]);
+
+        foreach ($classes as $id)
+            $insert->execute([$doc_ID, 'CLASS', $id]);
+
+        $conn->commit();
+        json_ok(['doc_ID' => $doc_ID]);
+
+    } catch (Throwable $e) {
+        if ($conn->inTransaction())
+            $conn->rollBack();
+        json_err("新增失敗：" . $e->getMessage());
+    }
+}
+
+/* -----------------------------------------------------------
+   編輯（update_file_with_targets）
+------------------------------------------------------------ */
+if ($do === 'update_file_with_targets') {
+
+    $doc_ID = intval($p['file_ID'] ?? 0);
+    if ($doc_ID <= 0)
+        json_err("doc_ID 無效");
+
+    $doc_name = trim($p['doc_name'] ?? '');
+    $doc_des = trim($p['doc_des'] ?? '');
+    $is_required = intval($p['is_required'] ?? 0);
+    $doc_start_d = $p['doc_start_d'] ?: null;
+    $doc_end_d = $p['doc_end_d'] ?: null;
+
+    if ($doc_name === '')
+        json_err("缺少文件名稱");
+
+    $cohorts = json_decode($p['target_cohorts'] ?? '[]', true);
+    $grades = json_decode($p['target_grades'] ?? '[]', true);
+    $classes = json_decode($p['target_classes'] ?? '[]', true);
+
+    $updatePDF = !empty($_FILES['doc_example']['name']);
+
+    if ($updatePDF) {
+        $ext = strtolower(pathinfo($_FILES['doc_example']['name'], PATHINFO_EXTENSION));
+        if ($ext !== 'pdf')
+            json_err("只允許 PDF");
+
+        $dir = __DIR__ . '/../templates';
+        if (!is_dir($dir))
+            mkdir($dir, 0775, true);
+
+        $saveName = 'doc_' . date('Ymd_His') . '_' . bin2hex(random_bytes(3)) . '.pdf';
+        $savePath = $dir . '/' . $saveName;
+        if (!move_uploaded_file($_FILES['doc_example']['tmp_name'], $savePath))
+            json_err("PDF 儲存失敗");
+
+        $file_url = 'templates/' . $saveName;
+    }
+
+    try {
+        $conn->beginTransaction();
+
+        /* 更新 docdata */
+        $sql = "
+            UPDATE docdata
+            SET doc_name=?, doc_des=?, is_required=?, doc_start_d=?, doc_end_d=?
+        ";
+        $params = [$doc_name, $doc_des, $is_required, $doc_start_d, $doc_end_d];
+
+        if ($updatePDF) {
+            $sql .= ", doc_example=?";
+            $params[] = $file_url;
+        }
+
+        $sql .= " WHERE doc_ID=?";
+        $params[] = $doc_ID;
+
+        $stmt = $conn->prepare($sql);
+        $stmt->execute($params);
+
+        /* 重建目標 */
+        $conn->prepare("DELETE FROM doctargetdata WHERE doc_ID=?")->execute([$doc_ID]);
+
+        $insert = $conn->prepare("
+            INSERT INTO doctargetdata (doc_ID, doc_target_type, doc_target_ID)
+            VALUES (?, ?, ?)
+        ");
+
+        foreach ($cohorts as $id)
+            $insert->execute([$doc_ID, 'COHORT', $id]);
+        foreach ($grades as $id)
+            $insert->execute([$doc_ID, 'GRADE', $id]);
+        foreach ($classes as $id)
+            $insert->execute([$doc_ID, 'CLASS', $id]);
+
+        $conn->commit();
+        json_ok();
+
+    } catch (Throwable $e) {
+        if ($conn->inTransaction())
+            $conn->rollBack();
+        json_err("更新失敗：" . $e->getMessage());
+    }
+}
+
+/* -----------------------------------------------------------
+   更新狀態 / 置頂
+------------------------------------------------------------ */
+if ($do === 'update_template') {
+
+    $req = json_decode(file_get_contents("php://input"), true) ?? [];
+
+    $doc_ID = intval($req['file_ID'] ?? 0);
+    $doc_status = intval($req['file_status'] ?? 0);
+    $is_top = intval($req['is_top'] ?? 0);
+
+    if ($doc_ID <= 0)
+        json_err("doc_ID 無效");
+
+    $stmt = $conn->prepare("
+        UPDATE docdata
+        SET doc_status=?, is_top=?
+        WHERE doc_ID=?
+    ");
+    $stmt->execute([$doc_status, $is_top, $doc_ID]);
+
+    json_ok();
+}
+
+/* -----------------------------------------------------------
+   刪除
+------------------------------------------------------------ */
+if ($do === 'delete_file') {
+
+    $req = json_decode(file_get_contents("php://input"), true) ?? [];
+    $doc_ID = intval($req['file_ID'] ?? 0);
+
+    if ($doc_ID <= 0)
+        json_err("doc_ID 無效");
+
+    try {
+        $conn->beginTransaction();
+
+        $stmt = $conn->prepare("SELECT doc_example FROM docdata WHERE doc_ID=?");
+        $stmt->execute([$doc_ID]);
+        $row = $stmt->fetch();
+
+        // 刪 docdata
+        $conn->prepare("DELETE FROM docdata WHERE doc_ID=?")->execute([$doc_ID]);
+
+        // 刪 PDF
+        if ($row && $row['doc_example']) {
+            $path = __DIR__ . '/../' . $row['doc_example'];
+            if (file_exists($path))
+                @unlink($path);
+        }
+
+        // 刪目標
+        $conn->prepare("DELETE FROM doctargetdata WHERE doc_ID=?")
+            ->execute([$doc_ID]);
+
+        $conn->commit();
+        json_ok();
+
+    } catch (Throwable $e) {
+        if ($conn->inTransaction())
+            $conn->rollBack();
+        json_err("刪除失敗：" . $e->getMessage());
+    }
+}
+?>
