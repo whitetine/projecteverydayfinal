@@ -41,7 +41,7 @@ $ensureFiledataTable = static function () use ($pdo): void {
   }
 
   try {
-    $count = (int)$pdo->query('SELECT COUNT(*) FROM filedata')->fetchColumn();
+    $count = (int) $pdo->query('SELECT COUNT(*) FROM filedata')->fetchColumn();
     if ($count > 0) {
       return;
     }
@@ -101,11 +101,26 @@ $normalizeDateTime = static function (?string $value): ?string {
 };
 
 $ensureFileColumns = static function () use ($pdo): void {
-  try { $pdo->exec('ALTER TABLE filedata ADD COLUMN file_des TEXT'); } catch (Throwable $e) {}
-  try { $pdo->exec('ALTER TABLE filedata ADD COLUMN is_required INT DEFAULT 0'); } catch (Throwable $e) {}
-  try { $pdo->exec('ALTER TABLE filedata ADD COLUMN file_start_d DATETIME NULL'); } catch (Throwable $e) {}
-  try { $pdo->exec('ALTER TABLE filedata ADD COLUMN file_end_d DATETIME NULL'); } catch (Throwable $e) {}
-  try { $pdo->exec('ALTER TABLE filedata ADD COLUMN file_update_d DATETIME NULL'); } catch (Throwable $e) {}
+  try {
+    $pdo->exec('ALTER TABLE filedata ADD COLUMN file_des TEXT');
+  } catch (Throwable $e) {
+  }
+  try {
+    $pdo->exec('ALTER TABLE filedata ADD COLUMN is_required INT DEFAULT 0');
+  } catch (Throwable $e) {
+  }
+  try {
+    $pdo->exec('ALTER TABLE filedata ADD COLUMN file_start_d DATETIME NULL');
+  } catch (Throwable $e) {
+  }
+  try {
+    $pdo->exec('ALTER TABLE filedata ADD COLUMN file_end_d DATETIME NULL');
+  } catch (Throwable $e) {
+  }
+  try {
+    $pdo->exec('ALTER TABLE filedata ADD COLUMN file_update_d DATETIME NULL');
+  } catch (Throwable $e) {
+  }
 };
 
 $ensureTargetTable = static function () use ($pdo): void {
@@ -194,28 +209,27 @@ $respondList = static function (bool $onlyActive = false) use ($pdo): void {
           }
         }
         unset($row);
-} catch (Throwable $e) {
+      } catch (Throwable $e) {
         // ignore if the table is missing
       }
     }
 
-    // 直接返回數組，與 f1.php 期望的格式一致
     header('Content-Type: application/json; charset=utf-8');
     echo json_encode($rows, JSON_UNESCAPED_UNICODE);
-  exit;
-} catch (Throwable $e) {
+    exit;
+  } catch (Throwable $e) {
     json_err('資料讀取失敗：' . $e->getMessage());
   }
 };
 
 $handleUpdate = static function (?array $payload = null) use ($pdo): void {
   $payload = $payload ?? read_json_body();
-  $fileId = (int)($payload['file_ID'] ?? 0);
+  $fileId = (int) ($payload['file_ID'] ?? 0);
   if ($fileId <= 0) {
     json_err('file_ID 無效');
   }
-  $fileStatus = array_key_exists('file_status', $payload) ? (int)$payload['file_status'] : null;
-  $isTop = array_key_exists('is_top', $payload) ? (int)$payload['is_top'] : null;
+  $fileStatus = array_key_exists('file_status', $payload) ? (int) $payload['file_status'] : null;
+  $isTop = array_key_exists('is_top', $payload) ? (int) $payload['is_top'] : null;
 
   if ($fileStatus === null && $isTop === null) {
     json_err('缺少更新欄位');
@@ -237,7 +251,7 @@ $handleUpdate = static function (?array $payload = null) use ($pdo): void {
 };
 
 $handleDelete = static function (array $ids) use ($pdo): void {
-  $ids = array_values(array_unique(array_filter(array_map('intval', $ids), static fn ($id) => $id > 0)));
+  $ids = array_values(array_unique(array_filter(array_map('intval', $ids), static fn($id) => $id > 0)));
   if (!$ids) {
     json_err('沒有指定要刪除的檔案');
   }
@@ -323,23 +337,26 @@ $handleUpload = static function (bool $withTargets = true) use ($pdo, $normalize
 
   $fileUrl = 'templates/' . $saveName;
   $fileDes = trim($_POST['file_des'] ?? '');
-  $isRequired = isset($_POST['is_required']) ? (int)$_POST['is_required'] : 0;
+  $isRequired = isset($_POST['is_required']) ? (int) $_POST['is_required'] : 0;
   $fileStart = $normalizeDateTime($_POST['file_start_d'] ?? null);
   $fileEnd = $normalizeDateTime($_POST['file_end_d'] ?? null);
 
-  $targetAll = $withTargets ? (int)($_POST['target_all'] ?? 0) : 0;
+  $targetAll = $withTargets ? (int) ($_POST['target_all'] ?? 0) : 0;
   $targetCohortsRaw = $withTargets ? ($_POST['target_cohorts'] ?? '[]') : '[]';
   $targetGradesRaw = $withTargets ? ($_POST['target_grades'] ?? '[]') : '[]';
   $targetClassesRaw = $withTargets ? ($_POST['target_classes'] ?? '[]') : '[]';
-  
+
   $targetCohorts = $withTargets ? (json_decode($targetCohortsRaw, true) ?: []) : [];
   $targetGrades = $withTargets ? (json_decode($targetGradesRaw, true) ?: []) : [];
   $targetClasses = $withTargets ? (json_decode($targetClassesRaw, true) ?: []) : [];
-  
+
   // 防呆：確保是數組格式
-  if (!is_array($targetCohorts)) $targetCohorts = [];
-  if (!is_array($targetGrades)) $targetGrades = [];
-  if (!is_array($targetClasses)) $targetClasses = [];
+  if (!is_array($targetCohorts))
+    $targetCohorts = [];
+  if (!is_array($targetGrades))
+    $targetGrades = [];
+  if (!is_array($targetClasses))
+    $targetClasses = [];
 
   $ensureFileColumns();
   if ($withTargets) {
@@ -354,7 +371,7 @@ $handleUpload = static function (bool $withTargets = true) use ($pdo, $normalize
       VALUES (?, ?, ?, ?, ?, ?, 1, 0, NOW())
     ");
     $stmt->execute([$fileName, $fileUrl, $fileDes, $isRequired, $fileStart, $fileEnd]);
-    $fileId = (int)$pdo->lastInsertId();
+    $fileId = (int) $pdo->lastInsertId();
 
     if ($withTargets) {
       if ($targetAll) {
@@ -364,7 +381,7 @@ $handleUpload = static function (bool $withTargets = true) use ($pdo, $normalize
           ON DUPLICATE KEY UPDATE file_target_ID = '1'
         ");
         $stmt->execute([$fileId]);
-    } else {
+      } else {
         $insertTarget = $pdo->prepare("
           INSERT INTO filetargetdata (file_ID, file_target_type, file_target_ID)
           VALUES (?, ?, ?)
@@ -372,17 +389,17 @@ $handleUpload = static function (bool $withTargets = true) use ($pdo, $normalize
         ");
         foreach ($targetCohorts as $id) {
           if ($id !== null && $id !== '') {
-            $insertTarget->execute([$fileId, 'COHORT', (string)$id]);
+            $insertTarget->execute([$fileId, 'COHORT', (string) $id]);
           }
         }
         foreach ($targetGrades as $id) {
           if ($id !== null && $id !== '') {
-            $insertTarget->execute([$fileId, 'GRADE', (string)$id]);
+            $insertTarget->execute([$fileId, 'GRADE', (string) $id]);
           }
         }
         foreach ($targetClasses as $id) {
           if ($id !== null && $id !== '') {
-            $insertTarget->execute([$fileId, 'CLASS', (string)$id]);
+            $insertTarget->execute([$fileId, 'CLASS', (string) $id]);
           }
         }
       }
@@ -400,7 +417,7 @@ $handleUpload = static function (bool $withTargets = true) use ($pdo, $normalize
 };
 
 $handleUpdateWithTargets = static function () use ($pdo, $normalizeDateTime, $ensureFileColumns, $ensureTargetTable): void {
-  $fileId = (int)($_POST['file_ID'] ?? 0);
+  $fileId = (int) ($_POST['file_ID'] ?? 0);
   if ($fileId <= 0) {
     json_err('file_ID 無效');
   }
@@ -411,23 +428,26 @@ $handleUpdateWithTargets = static function () use ($pdo, $normalizeDateTime, $en
   }
 
   $fileDes = trim($_POST['file_des'] ?? '');
-  $isRequired = isset($_POST['is_required']) ? (int)$_POST['is_required'] : 0;
+  $isRequired = isset($_POST['is_required']) ? (int) $_POST['is_required'] : 0;
   $fileStart = $normalizeDateTime($_POST['file_start_d'] ?? null);
   $fileEnd = $normalizeDateTime($_POST['file_end_d'] ?? null);
 
-  $targetAll = (int)($_POST['target_all'] ?? 0);
+  $targetAll = (int) ($_POST['target_all'] ?? 0);
   $targetCohortsRaw = $_POST['target_cohorts'] ?? '[]';
   $targetGradesRaw = $_POST['target_grades'] ?? '[]';
   $targetClassesRaw = $_POST['target_classes'] ?? '[]';
-  
+
   $targetCohorts = json_decode($targetCohortsRaw, true) ?: [];
   $targetGrades = json_decode($targetGradesRaw, true) ?: [];
   $targetClasses = json_decode($targetClassesRaw, true) ?: [];
-  
+
   // 防呆：確保是數組格式
-  if (!is_array($targetCohorts)) $targetCohorts = [];
-  if (!is_array($targetGrades)) $targetGrades = [];
-  if (!is_array($targetClasses)) $targetClasses = [];
+  if (!is_array($targetCohorts))
+    $targetCohorts = [];
+  if (!is_array($targetGrades))
+    $targetGrades = [];
+  if (!is_array($targetClasses))
+    $targetClasses = [];
 
   $ensureFileColumns();
   $ensureTargetTable();
@@ -499,17 +519,17 @@ $handleUpdateWithTargets = static function () use ($pdo, $normalizeDateTime, $en
       ");
       foreach ($targetCohorts as $id) {
         if ($id !== null && $id !== '') {
-          $insertTarget->execute([$fileId, 'COHORT', (string)$id]);
+          $insertTarget->execute([$fileId, 'COHORT', (string) $id]);
         }
       }
       foreach ($targetGrades as $id) {
         if ($id !== null && $id !== '') {
-          $insertTarget->execute([$fileId, 'GRADE', (string)$id]);
+          $insertTarget->execute([$fileId, 'GRADE', (string) $id]);
         }
       }
       foreach ($targetClasses as $id) {
         if ($id !== null && $id !== '') {
-          $insertTarget->execute([$fileId, 'CLASS', (string)$id]);
+          $insertTarget->execute([$fileId, 'CLASS', (string) $id]);
         }
       }
     }
@@ -603,4 +623,3 @@ if ($method === 'POST') {
 }
 
 json_err('Method Not Allowed');
-
