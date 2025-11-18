@@ -105,8 +105,17 @@ $sort = $_GET['sort'] ?? 'created';
 </div>
 <!-- 指定團隊選擇 Modal -->
 <div class="team-picker-modal" id="teamPickerModal" aria-hidden="true">
-  <div class="team-picker-dialog">
+  <div class="team-picker-dialog" aria-live="polite">
     <button type="button" class="btn-close" id="teamPickerClose" aria-label="關閉">×</button>
+    <div class="team-picker-header">
+      <div class="team-picker-header-text">
+        <h5 class="team-picker-title mb-1">指定團隊</h5>
+        <small class="text-muted">可多選；未選則預設全部團隊</small>
+      </div>
+      <button type="button" class="btn btn-outline-primary" id="teamPickerDualToggle">
+        指定被評分團隊
+      </button>
+    </div>
     <div class="team-dual-panel">
       <div class="team-panel assign">
         <div class="panel-title">
@@ -126,7 +135,7 @@ $sort = $_GET['sort'] ?? 'created';
         <div class="selected-display" id="teamModalReceiveSelected"></div>
       </div>
     </div>
-    <div class="team-picker-body dual">
+    <div class="team-picker-body">
       <div class="team-modal-placeholder" id="teamModalPlaceholder">請先選擇屆別與班級</div>
       <div class="team-panel-body assign" id="teamModalAssignList"></div>
       <div class="team-panel-body receive" id="teamModalReceiveList"></div>

@@ -217,12 +217,42 @@
   cursor: pointer;
 }
 
+.team-picker-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.25rem 1.5rem .5rem;
+}
+
+.team-picker-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.team-picker-header .btn {
+  border-radius: 999px;
+  font-weight: 600;
+  padding: .4rem 1rem;
+  box-shadow: none;
+}
+
 .team-dual-panel {
   display: grid;
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
   gap: 1rem;
   padding: 1.25rem 1.5rem 0;
+}
+
+.team-picker-dialog:not(.dual-mode) .team-dual-panel {
+  grid-template-columns: 1fr;
+}
+
+.team-picker-dialog:not(.dual-mode) .team-panel.receive,
+.team-picker-dialog:not(.dual-mode) .panel-arrow {
+  display: none;
 }
 
 .team-panel {
@@ -286,12 +316,25 @@
   box-shadow: 0 16px 30px rgba(99, 102, 241, 0.35);
 }
 
-.team-picker-body.dual {
+.team-picker-body {
+  padding: 1.25rem 1.5rem 1rem;
+  position: relative;
+}
+
+.team-picker-dialog.dual-mode .team-picker-body {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 1rem;
-  padding: 1.25rem 1.5rem 1rem;
-  position: relative;
+}
+
+.team-picker-dialog:not(.dual-mode) .team-picker-body {
+  display: block;
+}
+
+.team-picker-dialog:not(.dual-mode) #teamModalAssignList {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: .85rem;
 }
 
 .team-modal-placeholder {
@@ -308,23 +351,35 @@
   z-index: 2;
 }
 
-.team-picker-body.dual .team-panel-body {
+.team-picker-dialog .team-panel-body {
   background: #fff;
   border-radius: 16px;
   border: 1px solid rgba(99,102,241,0.12);
   padding: 1rem;
   min-height: 220px;
+}
+
+.team-picker-dialog.dual-mode .team-panel-body {
+  background: #fff;
   overflow-y: auto;
   display: flex;
   flex-wrap: wrap;
   gap: .75rem;
 }
 
-.team-chip-grid,
-.team-picker-body.dual .team-panel-body {
+.team-picker-dialog:not(.dual-mode) .team-panel-body {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
   gap: .85rem;
+}
+
+.team-chip-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: .85rem;
+}
+.team-picker-dialog:not(.dual-mode) #teamModalReceiveList {
+  display: none;
 }
 
 .team-chip-option {

@@ -19,6 +19,7 @@ const teamPickerState = {
   receiveIds: [],
   summaryMessage: '請先選擇屆別',
   receiveSummaryMessage: '請先選擇屆別',
+  dualMode: false,
   modalSelections: [],
   receiveModalSelections: [],
   pendingSelections: [],
@@ -468,40 +469,120 @@ function setupModeSelector() {
 function setupTeamPicker() {
   const trigger = document.getElementById('teamPickerTrigger');
   const clearBtn = document.getElementById('teamPickerClear');
+  const receiveTrigger = document.getElementById('receivePickerTrigger');
+  const receiveClearBtn = document.getElementById('receivePickerClear');
   const modal = document.getElementById('teamPickerModal');
   const closeBtn = document.getElementById('teamPickerClose');
   const cancelBtn = document.getElementById('teamPickerCancel');
   const saveBtn = document.getElementById('teamPickerSave');
+  const dualToggleBtn = document.getElementById('teamPickerDualToggle');
+  const mirrorBtn = document.getElementById('teamPickerMirror');
 
   if (trigger) {
-    trigger.addEventListener('click', () => openTeamPicker());
+    trigger.addEventListener('click', () => openTeamPicker('assign'));
     trigger.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
-        openTeamPicker();
+        openTeamPicker('assign');
       }
     });
   }
   if (clearBtn) {
     clearBtn.addEventListener('click', (e) => {
       e.stopPropagation();
-      setTeamSelections([], { forceAllLabel: true });
+      setTeamSelections([], { role: 'assign', forceAllLabel: true });
+    });
+  }
+  if (receiveTrigger) {
+    receiveTrigger.addEventListener('click', () => {
+      if (teamPickerState.mode !== 'cross') return;
+      openTeamPicker('receive');
+    });
+    receiveTrigger.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        if (teamPickerState.mode !== 'cross') return;
+        openTeamPicker('receive');
+      }
+    });
+  }
+  if (receiveClearBtn) {
+    receiveClearBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      setTeamSelections([], { role: 'receive', forceAllLabel: true });
     });
   }
   if (closeBtn) closeBtn.addEventListener('click', closeTeamPicker);
   if (cancelBtn) cancelBtn.addEventListener('click', closeTeamPicker);
   if (saveBtn) saveBtn.addEventListener('click', () => {
     const selections = teamPickerState.modalSelections || [];
-    const forceAll = selections.length === 0;
-    setTeamSelections(selections, { forceAllLabel: forceAll });
+    const receiveSelections = (teamPickerState.mode === 'cross')
+      ? (teamPickerState.dualMode ? (teamPickerState.receiveModalSelections || []) : teamPickerState.receiveIds || [])
+      : [];
+    const forceAllAssign = selections.length === 0;
+    const forceAllReceive = receiveSelections.length === 0;
+    setTeamSelections(selections, { role: 'assign', forceAllLabel: forceAllAssign });
+    if (teamPickerState.mode === 'cross') {
+      setTeamSelections(receiveSelections, { role: 'receive', forceAllLabel: forceAllReceive });
+    }
+    syncTeamHiddenValue();
     closeTeamPicker();
   });
+  if (dualToggleBtn) {
+    dualToggleBtn.addEventListener('click', () => {
+      if (teamPickerState.mode !== 'cross') return;
+      teamPickerState.dualMode = !teamPickerState.dualMode;
+      renderTeamModalLists();
+      updateModalLayout();
+    });
+  }
+  if (mirrorBtn) {
+    mirrorBtn.addEventListener('click', () => {
+      if (!teamPickerState.dualMode) {
+        teamPickerState.dualMode = true;
+        updateModalLayout();
+      }
+      teamPickerState.receiveModalSelections = [...(teamPickerState.modalSelections || [])];
+      renderModalSelectedDisplay('receive');
+      renderTeamModalList('receive');
+      updateMirrorButtonState();
+    });
+  }
   if (modal) {
     modal.addEventListener('click', (e) => {
       if (e.target === modal) closeTeamPicker();
     });
   }
   updateTeamSummaryDisplay();
+  updateModalLayout();
+}
+
+function updateMirrorButtonState() {
+  const mirrorBtn = document.getElementById('teamPickerMirror');
+  if (!mirrorBtn) return;
+  const canMirror = teamPickerState.mode === 'cross'
+    && teamPickerState.dualMode
+    && Array.isArray(teamPickerState.modalSelections)
+    && teamPickerState.modalSelections.length > 0;
+  mirrorBtn.disabled = !canMirror;
+}
+
+function updateModalLayout() {
+  const modal = document.getElementById('teamPickerModal');
+  if (!modal) return;
+  const dialog = modal.querySelector('.team-picker-dialog');
+  const body = modal.querySelector('.team-picker-body');
+  const isCross = teamPickerState.mode === 'cross';
+  const isDual = isCross && teamPickerState.dualMode;
+  dialog?.classList.toggle('dual-mode', isDual);
+  body?.classList.toggle('dual', isDual);
+
+  const toggleBtn = document.getElementById('teamPickerDualToggle');
+  if (toggleBtn) {
+    toggleBtn.classList.toggle('d-none', !isCross);
+    toggleBtn.textContent = isDual ? '回到僅指定團隊' : '指定被評分團隊';
+  }
+  updateMirrorButtonState();
 }
 
 function applyTeamPickerMode(mode) {
@@ -530,6 +611,10 @@ function applyTeamPickerMode(mode) {
     receiveClear.style.visibility = mode === 'cross' ? 'visible' : 'hidden';
   }
 
+  if (mode !== 'cross') {
+    teamPickerState.dualMode = false;
+  }
+
   if (!isSelectable) {
     setTeamSelections([], { role: 'assign', forceAllLabel: true });
     setTeamSelections([], { role: 'receive', forceAllLabel: true });
@@ -555,6 +640,7 @@ function applyTeamPickerMode(mode) {
 
   syncTeamHiddenValue();
   updateTeamSummaryDisplay();
+  updateModalLayout();
 }
 
 function updateTeamSummaryDisplay() {
@@ -640,18 +726,20 @@ function renderPickerDisplay(config) {
   summary.textContent = '';
 }
 
-function openTeamPicker() {
+function openTeamPicker(targetRole = 'assign') {
   if (!teamPickerState.enabled) return;
+  if (targetRole === 'receive' && teamPickerState.mode !== 'cross') return;
   const modal = document.getElementById('teamPickerModal');
   if (!modal) return;
-  if (!teamPickerState.list.length) {
-    teamPickerState.summaryMessage = '請先選擇屆別';
-    updateTeamSummaryDisplay();
-    return;
-  }
+
   teamPickerState.modalSelections = [...teamPickerState.selectedIds];
-  renderModalSelectedDisplay();
-  renderTeamModalList();
+  teamPickerState.receiveModalSelections = [...teamPickerState.receiveIds];
+  const shouldDual = teamPickerState.mode === 'cross'
+    && (targetRole === 'receive' || teamPickerState.dualMode);
+  teamPickerState.dualMode = shouldDual;
+
+  renderTeamModalLists();
+  updateModalLayout();
   modal.classList.add('show');
 }
 
@@ -660,21 +748,50 @@ function closeTeamPicker() {
   if (modal) modal.classList.remove('show');
 }
 
-function renderModalSelectedDisplay() {
-  const container = document.getElementById('teamModalSelected');
+function renderTeamModalLists() {
+  const placeholder = document.getElementById('teamModalPlaceholder');
+  const hasTeams = Array.isArray(teamPickerState.list) && teamPickerState.list.length > 0;
+  if (placeholder) {
+    placeholder.style.display = hasTeams ? 'none' : 'flex';
+  }
+
+  ['assign', 'receive'].forEach(role => {
+    renderModalSelectedDisplay(role);
+    renderTeamModalList(role);
+  });
+  updateMirrorButtonState();
+}
+
+function getModalSelectionByRole(role) {
+  return role === 'receive'
+    ? (teamPickerState.receiveModalSelections || [])
+    : (teamPickerState.modalSelections || []);
+}
+
+function renderModalSelectedDisplay(role) {
+  const containerId = role === 'receive'
+    ? 'teamModalReceiveSelected'
+    : 'teamModalAssignSelected';
+  const hintId = role === 'receive'
+    ? 'teamModalReceiveHint'
+    : 'teamModalAssignHint';
+  const container = document.getElementById(containerId);
+  const hintEl = document.getElementById(hintId);
   if (!container) return;
+
+  const selections = getModalSelectionByRole(role);
   container.innerHTML = '';
-  teamPickerState.modalSelections = Array.isArray(teamPickerState.modalSelections)
-    ? teamPickerState.modalSelections
-    : [];
-  if (!teamPickerState.modalSelections.length) {
+
+  if (!selections.length) {
     const span = document.createElement('span');
     span.className = 'text-muted';
     span.textContent = '未選擇（儲存後等同全部團隊）';
     container.appendChild(span);
+    if (hintEl) hintEl.textContent = '未選擇（儲存後等同全部團隊）';
     return;
   }
-  teamPickerState.modalSelections.forEach((id) => {
+
+  selections.forEach((id) => {
     const team = teamPickerState.list.find(t => String(t.team_ID) === id);
     if (!team) return;
     const chip = document.createElement('span');
@@ -684,51 +801,59 @@ function renderModalSelectedDisplay() {
     remove.className = 'remove';
     remove.textContent = '×';
     remove.addEventListener('click', () => {
-      teamPickerState.modalSelections = teamPickerState.modalSelections.filter(item => item !== id);
-      renderModalSelectedDisplay();
-      renderTeamModalList();
+      toggleModalSelection(role, id);
     });
     chip.appendChild(remove);
     container.appendChild(chip);
   });
+  if (!container.children.length) {
+    const span = document.createElement('span');
+    span.className = 'text-muted';
+    span.textContent = '目前屬於不同屆別，無法顯示名稱';
+    container.appendChild(span);
+  }
+  if (hintEl) {
+    hintEl.textContent = `已選擇 ${selections.length} 個團隊`;
+  }
 }
 
-function renderTeamModalList() {
-  const listEl = document.getElementById('teamModalList');
-  const placeholder = document.getElementById('teamModalPlaceholder');
-  if (!listEl || !placeholder) return;
-  teamPickerState.modalSelections = Array.isArray(teamPickerState.modalSelections)
-    ? teamPickerState.modalSelections
-    : [];
+function renderTeamModalList(role) {
+  const listId = role === 'receive'
+    ? 'teamModalReceiveList'
+    : 'teamModalAssignList';
+  const listEl = document.getElementById(listId);
+  if (!listEl) return;
 
-  if (!teamPickerState.list.length) {
-    placeholder.style.display = 'block';
-    listEl.innerHTML = '';
-    return;
-  }
-  placeholder.style.display = 'none';
+  const hasTeams = Array.isArray(teamPickerState.list) && teamPickerState.list.length > 0;
   listEl.innerHTML = '';
+  if (!hasTeams) return;
 
+  const selections = getModalSelectionByRole(role);
   teamPickerState.list.forEach(team => {
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'team-chip-option';
     btn.textContent = team.team_project_name;
     const idStr = String(team.team_ID);
-    if (teamPickerState.modalSelections.includes(idStr)) {
+    if (selections.includes(idStr)) {
       btn.classList.add('selected');
     }
-    btn.addEventListener('click', () => {
-      if (teamPickerState.modalSelections.includes(idStr)) {
-        teamPickerState.modalSelections = teamPickerState.modalSelections.filter(id => id !== idStr);
-      } else {
-        teamPickerState.modalSelections = [...teamPickerState.modalSelections, idStr];
-      }
-      renderModalSelectedDisplay();
-      renderTeamModalList();
-    });
+    btn.addEventListener('click', () => toggleModalSelection(role, idStr));
     listEl.appendChild(btn);
   });
+}
+
+function toggleModalSelection(role, id) {
+  const key = role === 'receive' ? 'receiveModalSelections' : 'modalSelections';
+  const current = Array.isArray(teamPickerState[key]) ? teamPickerState[key] : [];
+  if (current.includes(id)) {
+    teamPickerState[key] = current.filter(item => item !== id);
+  } else {
+    teamPickerState[key] = [...current, id];
+  }
+  renderModalSelectedDisplay(role);
+  renderTeamModalList(role);
+  updateMirrorButtonState();
 }
 
 function setTeamSelections(values, options = {}) {
@@ -826,10 +951,22 @@ function editRow(row) {
   setSelectedCohorts(selectedCohort, false);
   const selectedClass = row.pe_class_ID ? [String(row.pe_class_ID)] : [];
   setClassSelections(selectedClass, false);
-  const selectedTeams = parseTeamIdList(row.pe_target_ID);
-  setTeamSelections(selectedTeams, { keepMessage: !!selectedTeams.length, forceAllLabel: !selectedTeams.length });
+  const selectionPayload = parseTeamAssignmentPayload(row.pe_target_ID);
+  const assignList = selectionPayload.assign || [];
+  const receiveList = selectionPayload.receive || [];
+  setTeamSelections(assignList, {
+    role: 'assign',
+    keepMessage: !!assignList.length,
+    forceAllLabel: !assignList.length
+  });
+  setTeamSelections(receiveList, {
+    role: 'receive',
+    keepMessage: !!receiveList.length,
+    forceAllLabel: !receiveList.length
+  });
+  teamPickerState.dualMode = receiveList.length > 0;
   // 載入對應屆別的團隊，預選現有值
-  loadTeamList(selectedCohort, selectedClass, selectedTeams);
+  loadTeamList(selectedCohort, selectedClass, selectionPayload);
   const statusInput = document.getElementById('pe_status');
   if (statusInput) statusInput.value = row.pe_status == 1 ? '1' : '0';
 
@@ -848,7 +985,10 @@ function resetForm() {
   setClassSelections([], false);
   setSelectedCohorts([], true);
   teamPickerState.summaryMessage = '請先選擇屆別';
-  setTeamSelections([], { keepMessage: true });
+  teamPickerState.receiveSummaryMessage = '僅團隊間互評可設定';
+  teamPickerState.dualMode = false;
+  setTeamSelections([], { role: 'assign', keepMessage: true });
+  setTeamSelections([], { role: 'receive', keepMessage: true });
   const statusInput = document.getElementById('pe_status');
   if (statusInput) statusInput.value = '1';
 }
