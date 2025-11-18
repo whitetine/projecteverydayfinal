@@ -1,9 +1,5 @@
 (function(){
-if (window.__checkReviewPeriodsScriptLoaded) {
-  console.warn('checkreviewperiods.js already loaded; skipping reinitialization.');
-  return;
-}
-window.__checkReviewPeriodsScriptLoaded = true;
+// 移除重複載入檢查，允許 SPA 頁面切換時重新初始化
 
 // 動態解析 API URL（支援動態載入）
 function resolveCheckReviewPeriodsApiUrl() {
@@ -28,6 +24,11 @@ function __initCheckReviewPeriods() {
   // 動態設定表單 action
   const form = document.getElementById('periodForm');
   if (form) {
+    // 檢查是否已經初始化過（避免重複綁定）
+    if (form.dataset.initialized === 'true') {
+      return; // 已經初始化過，跳過
+    }
+    form.dataset.initialized = 'true';
     form.action = resolveCheckReviewPeriodsApiUrl();
     // 攔截表單提交，改用 AJAX
     form.addEventListener('submit', async function(e) {
@@ -86,11 +87,59 @@ function __initCheckReviewPeriods() {
   try { setupModeSelector(); } catch (e) { console.error(e); }
   try { setupTeamPicker(); } catch (e) { console.error(e); }
 }
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', __initCheckReviewPeriods);
-} else {
+// 初始化函數
+function initCheckReviewPeriods() {
+  // 檢查必要元素是否存在
+  if (!document.getElementById('periodForm') && !document.getElementById('cohortSelect')) {
+    return; // 頁面尚未載入，稍後再試
+  }
   __initCheckReviewPeriods();
 }
+
+// 立即執行（如果 DOM 已準備好）
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initCheckReviewPeriods);
+} else {
+  initCheckReviewPeriods();
+}
+
+// 暴露到 window，供 SPA 頁面切換時呼叫
+window.initCheckReviewPeriods = initCheckReviewPeriods;
+
+// 監聽頁面載入完成事件（SPA 使用）
+(function setupSPAObserver() {
+  let initTimer = null;
+  // 使用 MutationObserver 監聽內容區域變化
+  const contentArea = document.querySelector('#content, .content, main');
+  if (contentArea) {
+    const observer = new MutationObserver(function(mutations) {
+      // 當內容區域有變化時，檢查是否需要初始化（使用 debounce 避免頻繁觸發）
+      if (document.getElementById('periodForm') || document.getElementById('cohortSelect')) {
+        clearTimeout(initTimer);
+        initTimer = setTimeout(function() {
+          initCheckReviewPeriods();
+        }, 150);
+      }
+    });
+    observer.observe(contentArea, {
+      childList: true,
+      subtree: true
+    });
+    
+    // 立即檢查一次（如果頁面已經載入）
+    if (document.getElementById('periodForm') || document.getElementById('cohortSelect')) {
+      setTimeout(initCheckReviewPeriods, 100);
+    }
+  } else {
+    // 如果內容區域尚未載入，等待 DOMContentLoaded
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', setupSPAObserver);
+    } else {
+      // DOM 已準備好，但內容區域可能尚未載入，稍後再試
+      setTimeout(setupSPAObserver, 500);
+    }
+  }
+})();
 
 function setupCohortSelect() {
   const select = document.getElementById('cohortSelect');
