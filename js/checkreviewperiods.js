@@ -796,6 +796,13 @@ function updateModalLayout() {
     toggleBtn.classList.toggle('d-none', !isCross);
     toggleBtn.textContent = isDual ? '回到僅指定團隊' : '指定被評分團隊';
   }
+  
+  // 更新被評分團隊欄位的顯示狀態
+  const receiveField = document.getElementById('receiveTeamField');
+  if (receiveField) {
+    receiveField.classList.toggle('d-none', !isDual);
+  }
+  
   updateMirrorButtonState();
 }
 
@@ -815,7 +822,8 @@ function applyTeamPickerMode(mode) {
   }
 
   if (receiveField) {
-    receiveField.classList.toggle('d-none', mode !== 'cross');
+    // 只有在 cross 模式且 dualMode 為 true 時才顯示被評分團隊欄位
+    receiveField.classList.toggle('d-none', mode !== 'cross' || !teamPickerState.dualMode);
   }
   if (receiveTrigger) {
     receiveTrigger.setAttribute('aria-disabled', mode === 'cross' ? 'false' : 'true');
@@ -1179,6 +1187,12 @@ function loadPeriodTable(page) {
 function editRow(row) {
   document.getElementById('form_action').value = 'update';
   document.getElementById('submitBtn').innerText = '更新';
+  
+  // 顯示取消編輯按鈕
+  const cancelEditBtn = document.getElementById('cancelEditBtn');
+  if (cancelEditBtn) {
+    cancelEditBtn.classList.remove('d-none');
+  }
 
   document.getElementById('period_ID').value = row.period_ID || '';
   document.getElementById('period_start_d').value = row.period_start_d || '';
@@ -1213,6 +1227,11 @@ function editRow(row) {
     forceAllLabel: !receiveList.length
   });
   teamPickerState.dualMode = receiveList.length > 0;
+  // 如果有被評分團隊資料，顯示被評分團隊欄位
+  const receiveField = document.getElementById('receiveTeamField');
+  if (receiveField && teamPickerState.dualMode && teamPickerState.mode === 'cross') {
+    receiveField.classList.remove('d-none');
+  }
   // 載入對應屆別的團隊，預選現有值
   loadTeamList(selectedCohort, selectedClass, selectionPayload);
   const statusInput = document.getElementById('pe_status');
@@ -1237,11 +1256,30 @@ function resetForm() {
   teamPickerState.dualMode = false;
   setTeamSelections([], { role: 'assign', keepMessage: true });
   setTeamSelections([], { role: 'receive', keepMessage: true });
+  // 隱藏被評分團隊欄位
+  const receiveField = document.getElementById('receiveTeamField');
+  if (receiveField) {
+    receiveField.classList.add('d-none');
+  }
   const statusInput = document.getElementById('pe_status');
   if (statusInput) statusInput.value = '1';
+  
+  // 隱藏取消編輯按鈕
+  const cancelEditBtn = document.getElementById('cancelEditBtn');
+  if (cancelEditBtn) {
+    cancelEditBtn.classList.add('d-none');
+  }
+}
+
+/* 取消編輯 */
+function cancelEdit() {
+  resetForm();
+  // 滾動到頂部
+  window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
 window.editRow = editRow;
 window.resetForm = resetForm;
+window.cancelEdit = cancelEdit;
 
 })();

@@ -1029,15 +1029,21 @@ foreach ($tmp as $r) $rankByCreated[$r['period_ID']] = $i++;
 <?php if ($totalPages > 1): ?>
 <div class="period-pagination" data-period-page="<?= $page ?>">
   <?php if ($page > 1): ?>
-    <button type="button" class="page-btn nav" data-page="<?= $page - 1 ?>">上一頁</button>
+    <button type="button" class="page-btn nav" data-page="<?= $page - 1 ?>">&laquo;</button>
+  <?php else: ?>
+    <button type="button" class="page-btn nav disabled">&laquo;</button>
   <?php endif; ?>
   <?php for ($i = 1; $i <= $totalPages; $i++): ?>
-    <button type="button" class="page-btn number <?= $i === $page ? 'active' : '' ?>" data-page="<?= $i ?>">
+    <button type="button"
+      class="page-btn number <?= $i === $page ? 'active' : '' ?>"
+      <?= $i === $page ? '' : 'data-page="' . $i . '"' ?>>
       <?= $i ?>
     </button>
   <?php endfor; ?>
   <?php if ($page < $totalPages): ?>
-    <button type="button" class="page-btn nav" data-page="<?= $page + 1 ?>">下一頁</button>
+    <button type="button" class="page-btn nav" data-page="<?= $page + 1 ?>">&raquo;</button>
+  <?php else: ?>
+    <button type="button" class="page-btn nav disabled">&raquo;</button>
   <?php endif; ?>
 </div>
 <?php endif; ?>

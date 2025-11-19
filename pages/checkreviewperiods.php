@@ -40,54 +40,51 @@ $sort = $_GET['sort'] ?? 'created';
         <div class="col-md-3">
           <label class="form-label">開始日</label>
           <input type="datetime-local" class="form-control" name="period_start_d" id="period_start_d" required>
+          <label class="form-label mt-3">屆別</label>
+          <select class="form-select multi-select-list" id="cohortSelect" multiple size="6" aria-label="屆別多選">
+            <option value="">載入中...</option>
+          </select>
+          <small class="text-muted d-block mt-1">可多選，按住 Ctrl/Cmd 鍵；未選表示全部屆別。</small>
+          <input type="hidden" name="cohort_values" id="cohort_values" value="">
+          <input type="hidden" name="cohort_primary" id="cohort_primary" value="">
         </div>
         <div class="col-md-3">
           <label class="form-label">結束日</label>
           <input type="datetime-local" class="form-control" name="period_end_d" id="period_end_d" required>
-        </div>
-        <div class="col-md-3">
-          <label class="form-label">標題</label>
-          <input type="text" class="form-control" name="period_title" id="period_title" required>
-        </div>
-
-        <div class="col-md-4">
-          <label class="form-label">屆別</label>
-          <select class="form-select multi-select-list" id="cohortSelect" multiple size="6" aria-label="屆別多選">
-            <option value="">載入中...</option>
-          </select>
-          <small class="text-muted d-block mt-1">可多選，按住 Ctrl/Cmd 鍵；優先使用第一個屆別建立時段。</small>
-          <input type="hidden" name="cohort_values" id="cohort_values" value="">
-          <input type="hidden" name="cohort_primary" id="cohort_primary" value="">
-        </div>
-        <div class="col-md-4">
-          <label class="form-label">班級</label>
+          <label class="form-label mt-3">班級</label>
           <select class="form-select multi-select-list" id="classSelect" multiple size="6" aria-label="班級多選">
             <option value="">載入中...</option>
           </select>
           <small class="text-muted d-block mt-1">可多選，按住 Ctrl/Cmd 鍵；未選表示全部班級。</small>
           <input type="hidden" name="pe_class_ID" id="class_primary" value="">
         </div>
-        <div class="col-md-4">
-          <label class="form-label">指定團隊</label>
-          <div class="team-picker-input" id="teamPickerTrigger" role="button" tabindex="0" aria-label="指定團隊挑選">
-            <div class="team-picker-content">
-              <span id="teamPickerSummary" class="placeholder">請先選擇屆別</span>
-              <div class="team-picker-tags" id="teamPickerTags"></div>
+        <div class="col-md-3">
+          <label class="form-label">標題</label>
+          <input type="text" class="form-control" name="period_title" id="period_title" required>
+          <div class="row g-2 mt-3">
+            <div class="col-6">
+              <label class="form-label">指定團隊</label>
+              <div class="team-picker-input" id="teamPickerTrigger" role="button" tabindex="0" aria-label="指定團隊挑選">
+                <div class="team-picker-content">
+                  <span id="teamPickerSummary" class="placeholder">請先選擇屆別</span>
+                  <div class="team-picker-tags" id="teamPickerTags"></div>
+                </div>
+                <button type="button" class="clear-btn" id="teamPickerClear" aria-label="清除指定團隊">&times;</button>
+              </div>
+              <input type="hidden" name="pe_target_ID" id="team_input" value="ALL">
             </div>
-            <button type="button" class="clear-btn" id="teamPickerClear" aria-label="清除指定團隊">&times;</button>
-          </div>
-          <input type="hidden" name="pe_target_ID" id="team_input" value="ALL">
-        </div>
-        <div class="col-md-4 d-none" id="receiveTeamField">
-          <label class="form-label">被評分團隊</label>
-          <div class="team-picker-input" id="receivePickerTrigger" role="button" tabindex="0" aria-label="被評分團隊挑選">
-            <div class="team-picker-content">
-              <span id="receivePickerSummary" class="placeholder">僅團隊間互評可設定</span>
-              <div class="team-picker-tags" id="receivePickerTags"></div>
+            <div class="col-6 d-none" id="receiveTeamField">
+              <label class="form-label">被評分團隊</label>
+              <div class="team-picker-input" id="receivePickerTrigger" role="button" tabindex="0" aria-label="被評分團隊挑選">
+                <div class="team-picker-content">
+                  <span id="receivePickerSummary" class="placeholder">僅團隊間互評可設定</span>
+                  <div class="team-picker-tags" id="receivePickerTags"></div>
+                </div>
+                <button type="button" class="clear-btn" id="receivePickerClear" aria-label="清除被評分團隊">&times;</button>
+              </div>
+              <input type="hidden" id="team_receive_input" value="">
             </div>
-            <button type="button" class="clear-btn" id="receivePickerClear" aria-label="清除被評分團隊">&times;</button>
           </div>
-          <input type="hidden" id="team_receive_input" value="">
         </div>
 
         <input type="hidden" name="pe_status" id="pe_status" value="1">
@@ -95,6 +92,7 @@ $sort = $_GET['sort'] ?? 'created';
         <div class="col-12">
           <button class="btn btn-primary" type="submit" id="submitBtn">新增</button>
           <button class="btn btn-secondary" type="button" onclick="resetForm()">清空</button>
+          <button class="btn btn-outline-secondary d-none" type="button" id="cancelEditBtn" onclick="cancelEdit()">取消編輯</button>
         </div>
       </form>
     </div>
