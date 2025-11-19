@@ -273,7 +273,9 @@ function fetchPeriodTargetTeams(PDO $conn, array $periodIds) {
                 'receive' => [],
                 'cohort_id' => null,
                 'class_id' => null,
-                'grade_no' => null
+                'grade_no' => null,
+                'cohort_ids' => [],
+                'class_ids' => []
             ];
         }
         $teamId = $row['pe_team_ID'];
@@ -284,16 +286,29 @@ function fetchPeriodTargetTeams(PDO $conn, array $periodIds) {
             }
             $map[$pid][$role][] = (int)$teamId;
         }
-        if ($includeCohort && $map[$pid]['cohort_id'] === null && isset($row['pe_cohort_ID']) && $row['pe_cohort_ID'] !== null) {
-            $map[$pid]['cohort_id'] = (int)$row['pe_cohort_ID'];
+        if ($includeCohort && isset($row['pe_cohort_ID']) && $row['pe_cohort_ID'] !== null) {
+            $cid = (int)$row['pe_cohort_ID'];
+            if ($map[$pid]['cohort_id'] === null) {
+                $map[$pid]['cohort_id'] = $cid;
+            }
+            $map[$pid]['cohort_ids'][$cid] = true;
         }
-        if ($includeClass && $map[$pid]['class_id'] === null && isset($row['pe_class_ID']) && $row['pe_class_ID'] !== null) {
-            $map[$pid]['class_id'] = (int)$row['pe_class_ID'];
+        if ($includeClass && isset($row['pe_class_ID']) && $row['pe_class_ID'] !== null) {
+            $classId = (int)$row['pe_class_ID'];
+            if ($map[$pid]['class_id'] === null) {
+                $map[$pid]['class_id'] = $classId;
+            }
+            $map[$pid]['class_ids'][$classId] = true;
         }
         if ($includeGrade && $map[$pid]['grade_no'] === null && array_key_exists('pe_grade_no', $row) && $row['pe_grade_no'] !== null) {
             $map[$pid]['grade_no'] = (int)$row['pe_grade_no'];
         }
     }
+    foreach ($map as &$info) {
+        $info['cohort_ids'] = array_values(array_unique(array_map('intval', array_keys($info['cohort_ids']))));
+        $info['class_ids'] = array_values(array_unique(array_map('intval', array_keys($info['class_ids']))));
+    }
+    unset($info);
     return $map;
 }
 
@@ -819,6 +834,14 @@ foreach ($periodTargetMap as $info) {
     if ($cid > 0) {
         $cohortIds[$cid] = true;
     }
+    if (!empty($info['cohort_ids'])) {
+        foreach ($info['cohort_ids'] as $extraCid) {
+            $extraCid = (int)$extraCid;
+            if ($extraCid > 0) {
+                $cohortIds[$extraCid] = true;
+            }
+        }
+    }
 }
 if ($cohortIds && tableExists($conn, 'cohortdata')) {
     $placeholders = implode(',', array_fill(0, count($cohortIds), '?'));
@@ -836,7 +859,14 @@ if ($cohortIds && tableExists($conn, 'cohortdata')) {
 $teamIdSet = [];
 foreach ($rows as &$rowItem) {
     $payload = parseTeamTarget($rowItem['pe_target_ID'] ?? '');
-    $fallbackTargets = $periodTargetMap[(int)($rowItem['period_ID'] ?? 0)] ?? ['assign' => [], 'receive' => [], 'cohort_id' => null];
+    $fallbackTargets = $periodTargetMap[(int)($rowItem['period_ID'] ?? 0)] ?? [
+        'assign' => [],
+        'receive' => [],
+        'cohort_id' => null,
+        'class_id' => null,
+        'cohort_ids' => [],
+        'class_ids' => []
+    ];
     if (!count($payload['assign']) && !empty($fallbackTargets['assign'])) {
         $payload['assign'] = array_map('strval', $fallbackTargets['assign']);
         $payload['is_all'] = false;
@@ -844,17 +874,41 @@ foreach ($rows as &$rowItem) {
     if (!count($payload['receive']) && !empty($fallbackTargets['receive'])) {
         $payload['receive'] = array_map('strval', $fallbackTargets['receive']);
     }
+    $cohortList = [];
+    $classList = [];
+    $directCohortId = (int)($rowItem['cohort_ID'] ?? 0);
+    if ($directCohortId > 0) {
+        $cohortList[] = $directCohortId;
+    }
+    if (!empty($fallbackTargets['cohort_ids'])) {
+        $cohortList = array_merge($cohortList, array_map('intval', $fallbackTargets['cohort_ids']));
+    } elseif (!empty($fallbackTargets['cohort_id'])) {
+        $cohortList[] = (int)$fallbackTargets['cohort_id'];
+    }
+    if (!empty($rowItem['pe_class_ID'])) {
+        $classList[] = (int)$rowItem['pe_class_ID'];
+    }
+    if (!empty($fallbackTargets['class_ids'])) {
+        $classList = array_merge($classList, array_map('intval', $fallbackTargets['class_ids']));
+    } elseif (!empty($fallbackTargets['class_id'])) {
+        $classList[] = (int)$fallbackTargets['class_id'];
+    }
+    $cohortList = array_values(array_unique(array_filter($cohortList)));
+    $classList = array_values(array_unique(array_filter($classList)));
+    $rowItem['_cohort_ids'] = $cohortList;
+    $rowItem['_class_ids'] = $classList;
+    $rowItem['_team_assign_ids'] = $payload['assign'];
+    $rowItem['_team_receive_ids'] = $payload['receive'];
+
     $cohortDisplay = '－';
     $directLabel = trim((string)($rowItem['cohort_name'] ?? ''));
     $directYear = trim((string)($rowItem['year_label'] ?? ''));
     if ($directLabel !== '') {
         $cohortDisplay = $directYear !== '' ? "{$directLabel} ({$directYear})" : $directLabel;
     } else {
-        $cohortId = (int)($rowItem['cohort_ID'] ?? 0);
-        if ($cohortId > 0 && isset($cohortDisplayMap[$cohortId])) {
-            $cohortDisplay = $cohortDisplayMap[$cohortId];
-        } elseif (!empty($fallbackTargets['cohort_id']) && isset($cohortDisplayMap[$fallbackTargets['cohort_id']])) {
-            $cohortDisplay = $cohortDisplayMap[$fallbackTargets['cohort_id']];
+        $displayCohortId = $cohortList[0] ?? null;
+        if ($displayCohortId !== null && isset($cohortDisplayMap[$displayCohortId])) {
+            $cohortDisplay = $cohortDisplayMap[$displayCohortId];
         }
     }
     $rowItem['_cohort_display'] = $cohortDisplay;

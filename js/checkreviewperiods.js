@@ -1050,11 +1050,22 @@ function editRow(row) {
   document.getElementById('period_start_d').value = row.period_start_d || '';
   document.getElementById('period_end_d').value = row.period_end_d || '';
   document.getElementById('period_title').value = row.period_title || '';
-  const selectedCohort = row.cohort_ID ? [String(row.cohort_ID)] : [];
+  const selectedCohort = Array.isArray(row._cohort_ids) && row._cohort_ids.length
+    ? row._cohort_ids.map(String)
+    : (row.cohort_ID ? [String(row.cohort_ID)] : []);
   setSelectedCohorts(selectedCohort, false);
-  const selectedClass = row.pe_class_ID ? [String(row.pe_class_ID)] : [];
+  const selectedClass = Array.isArray(row._class_ids) && row._class_ids.length
+    ? row._class_ids.map(String)
+    : (row.pe_class_ID ? [String(row.pe_class_ID)] : []);
   setClassSelections(selectedClass, false);
-  const selectionPayload = parseTeamAssignmentPayload(row.pe_target_ID);
+  const selectionPayload = {
+    assign: Array.isArray(row._team_assign_ids) && row._team_assign_ids.length
+      ? row._team_assign_ids.map(String)
+      : (parseTeamAssignmentPayload(row.pe_target_ID).assign || []),
+    receive: Array.isArray(row._team_receive_ids) && row._team_receive_ids.length
+      ? row._team_receive_ids.map(String)
+      : (parseTeamAssignmentPayload(row.pe_target_ID).receive || [])
+  };
   const assignList = selectionPayload.assign || [];
   const receiveList = selectionPayload.receive || [];
   setTeamSelections(assignList, {
