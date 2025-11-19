@@ -49,6 +49,9 @@ const teamPickerState = {
   pendingReceiveSelections: [],
   activePanel: 'assign'
 };
+const periodTableState = {
+  page: 1
+};
 
 function __initCheckReviewPeriods() {
   // 動態設定表單 action
@@ -67,6 +70,18 @@ function __initCheckReviewPeriods() {
         return;
       }
       const formData = new FormData(form);
+      const actionField = document.getElementById('form_action');
+      if (actionField) {
+        formData.set('action', actionField.value || 'create');
+      }
+      const periodField = document.getElementById('period_ID');
+      if (periodField) {
+        formData.set('period_ID', periodField.value || '');
+      }
+      const statusField = document.getElementById('pe_status');
+      if (statusField) {
+        formData.set('pe_status', statusField.value || '1');
+      }
       const action = formData.get('action');
       
       try {
@@ -116,6 +131,7 @@ function __initCheckReviewPeriods() {
   try { setupModeSelector(); } catch (e) { console.error(e); }
   try { setupTeamPicker(); } catch (e) { console.error(e); }
   try { setupStatusToggleDelegation(); } catch (e) { console.error(e); }
+  try { setupDeleteDelegation(); } catch (e) { console.error(e); }
 }
 
 function validatePeriodForm() {
@@ -615,6 +631,104 @@ function setupStatusToggleDelegation() {
   });
 }
 
+function setupDeleteDelegation() {
+  const container = document.getElementById('periodTable');
+  if (!container || container.dataset.deleteBound === 'true') return;
+  container.dataset.deleteBound = 'true';
+  container.addEventListener('submit', (event) => {
+    const form = event.target;
+    if (!(form instanceof HTMLFormElement)) return;
+    if (form.dataset.role !== 'delete') return;
+    event.preventDefault();
+    const idInput = form.querySelector('input[name="period_ID"]');
+    if (!idInput || !idInput.value) return;
+    if (window.Swal) {
+      Swal.fire({
+        title: '確定刪除？',
+        icon: 'warning',
+        reverseButtons: true,
+        showCancelButton: true,
+        confirmButtonText: '刪除',
+        cancelButtonText: '取消',
+        confirmButtonColor: '#dc3545',
+        cancelButtonColor: '#6c757d'
+      }).then(result => {
+        if (result.isConfirmed) {
+          handleDeleteFormSubmit(form);
+        }
+      });
+    } else {
+      if (window.confirm('確定刪除？')) {
+        handleDeleteFormSubmit(form);
+      }
+    }
+  });
+}
+
+async function handleDeleteFormSubmit(form) {
+  const apiUrl = resolveCheckReviewPeriodsApiUrl();
+  const formData = new FormData(form);
+  if (!formData.get('action')) {
+    formData.set('action', 'delete');
+  }
+  const submitBtn = form.querySelector('button[type="submit"]');
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.classList.add('loading');
+  }
+  try {
+    const res = await fetch(apiUrl, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'X-Requested-With': 'XMLHttpRequest' },
+      body: formData
+    });
+    const result = await parseJsonResponse(res);
+    if (!res.ok || !result.success) {
+      throw new Error(result?.msg || '刪除失敗');
+    }
+    const deletedId = formData.get('period_ID');
+    if (deletedId && document.getElementById('period_ID')?.value === deletedId) {
+      resetForm();
+    }
+    await loadPeriodTable();
+    if (window.Swal) {
+      Swal.fire({
+        title: '已刪除',
+        icon: 'success',
+        timer: 1500,
+        showConfirmButton: false
+      });
+    }
+  } catch (err) {
+    console.error('刪除失敗:', err);
+    if (window.Swal) {
+      Swal.fire('錯誤', err.message || '刪除失敗', 'error');
+    } else {
+      alert(err.message || '刪除失敗');
+    }
+  } finally {
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.classList.remove('loading');
+    }
+  }
+}
+
+function setupPaginationDelegation() {
+  const container = document.getElementById('periodTable');
+  if (!container || container.dataset.paginationBound === 'true') return;
+  container.dataset.paginationBound = 'true';
+  container.addEventListener('click', (event) => {
+    const trigger = event.target.closest('[data-page]');
+    if (!trigger || !container.contains(trigger)) return;
+    const page = parseInt(trigger.dataset.page, 10);
+    if (!page || page === periodTableState.page) return;
+    event.preventDefault();
+    loadPeriodTable(page);
+  });
+}
+
 function handleStatusToggleClick(button) {
   const periodId = button.dataset.periodId;
   const nextStatus = button.dataset.nextStatus === '1' ? 1 : 0;
@@ -1023,15 +1137,35 @@ function syncTeamHiddenValue() {
 }
 
 /* 載入資料表 */
-function loadPeriodTable() {
+function loadPeriodTable(page) {
   const apiUrl = resolveCheckReviewPeriodsApiUrl();
-  const sort = new URLSearchParams(window.location.search).get("sort") || "created";
-  return fetch(`${apiUrl}?sort=${sort}`)
+  const urlParams = new URLSearchParams(window.location.search);
+  const sort = urlParams.get("sort") || "created";
+  const currentPage = Number.isInteger(page) ? page : (periodTableState.page || 1);
+  periodTableState.page = currentPage;
+  urlParams.set('sort', sort);
+  urlParams.set('page', currentPage);
+  return fetch(`${apiUrl}?${urlParams.toString()}`)
       .then(r => r.text())
       .then(html => {
           const container = document.getElementById("periodTable");
           if (container) {
             container.innerHTML = html;
+            delete container.dataset.statusToggleBound;
+            delete container.dataset.deleteBound;
+            delete container.dataset.paginationBound;
+            const paginationMeta = container.querySelector('.period-pagination');
+            if (paginationMeta && paginationMeta.dataset.periodPage) {
+              const serverPage = parseInt(paginationMeta.dataset.periodPage, 10);
+              if (serverPage) {
+                periodTableState.page = serverPage;
+              }
+            } else if (!page) {
+              periodTableState.page = 1;
+            }
+            setupStatusToggleDelegation();
+            setupDeleteDelegation();
+            setupPaginationDelegation();
           }
       })
       .catch(err => {

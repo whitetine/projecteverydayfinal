@@ -4,6 +4,21 @@ require '../includes/pdo.php';
 
 $sort = $_REQUEST['sort'] ?? 'created';
 $periodHasStatusColumn = hasPeriodStatusColumn($conn);
+$requestAction = $_POST['action'] ?? '';
+$isAjaxRequest = isset($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest';
+$perPage = max(1, min(50, (int)($_GET['per_page'] ?? 10)));
+$page = max(1, (int)($_GET['page'] ?? 1));
+$offset = ($page - 1) * $perPage;
+$totalRows = (int)($conn->query("SELECT COUNT(*) FROM perioddata")->fetchColumn() ?: 0);
+$totalPages = max(1, (int)ceil($totalRows / $perPage));
+if ($page > $totalPages) {
+    $page = $totalPages;
+    $offset = ($page - 1) * $perPage;
+}
+if ($requestAction === 'create' && !empty($_POST['period_ID'])) {
+    $requestAction = 'update';
+    $_POST['action'] = 'update';
+}
 
 function parseTeamTarget($raw) {
     $result = [
@@ -445,7 +460,7 @@ switch ($sort) {
 }
 
 /* CRUD: create */
-if ($_POST['action'] ?? '' === 'create') {
+if ($requestAction === 'create') {
     // 檢查欄位是否存在
     $hasCohortId = false;
     $hasPeTargetId = false;
@@ -525,7 +540,7 @@ if ($_POST['action'] ?? '' === 'create') {
 }
 
 /* CRUD: update */
-if ($_POST['action'] ?? '' === 'update') {
+if ($requestAction === 'update') {
     // 檢查欄位是否存在
     $hasCohortId = false;
     $hasPeTargetId = false;
@@ -592,14 +607,29 @@ if ($_POST['action'] ?? '' === 'update') {
 }
 
 /* CRUD: delete */
-if ($_POST['action'] ?? '' === 'delete') {
-    $stmt = $conn->prepare("DELETE FROM perioddata WHERE period_ID=?");
-    $stmt->execute([$_POST['period_ID']]);
+if ($requestAction === 'delete') {
+    $periodId = (int)($_POST['period_ID'] ?? 0);
+    $deleted = false;
+    if ($periodId > 0) {
+        if (tableExists($conn, 'petargetdata')) {
+            $conn->prepare("DELETE FROM petargetdata WHERE period_ID=?")->execute([$periodId]);
+        }
+        $stmt = $conn->prepare("DELETE FROM perioddata WHERE period_ID=?");
+        $deleted = $stmt->execute([$periodId]);
+    }
+    if ($isAjaxRequest) {
+        header('Content-Type: application/json; charset=utf-8');
+        echo json_encode([
+            'success' => $deleted,
+            'period_ID' => $periodId
+        ]);
+        exit;
+    }
     header("Location: checkreviewperiods.php?sort=$sort");
     exit;
 }
 
-if ($_POST['action'] ?? '' === 'toggle_status') {
+if ($requestAction === 'toggle_status') {
     $periodId = (int)($_POST['period_ID'] ?? 0);
     $targetStatus = (int)($_POST['target_status'] ?? 0) === 1 ? 1 : 0;
     $success = false;
@@ -811,8 +841,11 @@ if ($hasCohortId) {
                 $orderBy";
     }
 }
+$sql .= " LIMIT :limit OFFSET :offset";
 
 $stmt = $conn->prepare($sql);
+$stmt->bindValue(':limit', $perPage, PDO::PARAM_INT);
+$stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
 $stmt->execute();
 $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
@@ -982,7 +1015,7 @@ foreach ($tmp as $r) $rankByCreated[$r['period_ID']] = $i++;
         <button class="btn btn-sm btn-outline-primary" 
           onclick='editRow(<?= json_encode($r, JSON_UNESCAPED_UNICODE) ?>)'>編輯</button>
 
-        <form method="post" action="pages/checkreviewperiods_data.php" class="d-inline" onsubmit="return confirm('確定刪除？');">
+        <form method="post" action="pages/checkreviewperiods_data.php" class="d-inline delete-form" data-role="delete">
           <input type="hidden" name="action" value="delete">
           <input type="hidden" name="period_ID" value="<?= $r['period_ID'] ?>">
           <input type="hidden" name="sort" value="<?= htmlspecialchars($sort) ?>">
@@ -993,3 +1026,18 @@ foreach ($tmp as $r) $rankByCreated[$r['period_ID']] = $i++;
 <?php endforeach; ?>
   </tbody>
 </table>
+<?php if ($totalPages > 1): ?>
+<div class="period-pagination" data-period-page="<?= $page ?>">
+  <?php if ($page > 1): ?>
+    <button type="button" class="page-btn nav" data-page="<?= $page - 1 ?>">上一頁</button>
+  <?php endif; ?>
+  <?php for ($i = 1; $i <= $totalPages; $i++): ?>
+    <button type="button" class="page-btn number <?= $i === $page ? 'active' : '' ?>" data-page="<?= $i ?>">
+      <?= $i ?>
+    </button>
+  <?php endfor; ?>
+  <?php if ($page < $totalPages): ?>
+    <button type="button" class="page-btn nav" data-page="<?= $page + 1 ?>">下一頁</button>
+  <?php endif; ?>
+</div>
+<?php endif; ?>

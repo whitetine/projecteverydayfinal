@@ -175,6 +175,49 @@
   font-size: .9rem;
 }
 
+.period-pagination {
+  margin-top: .5rem;
+  padding: .75rem 1.25rem;
+  background: #fff7f0;
+  border-radius: 0 0 20px 20px;
+  border-top: 3px solid #f0ba8a;
+  display: flex;
+  justify-content: center;
+  gap: .35rem;
+  box-shadow: 0 12px 25px rgba(15, 23, 42, 0.08);
+}
+
+.period-pagination .page-btn {
+  border: none;
+  background: transparent;
+  color: #b07c53;
+  font-weight: 600;
+  font-size: 1rem;
+  padding: .2rem .75rem;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background .15s ease, color .15s ease;
+}
+
+.period-pagination .page-btn.number {
+  cursor: default;
+}
+
+.period-pagination .page-btn.number.active {
+  color: #9c5c2d;
+}
+
+.period-pagination .page-btn.nav {
+  background: #fff;
+  border: 1px solid rgba(176, 124, 83, 0.35);
+  cursor: pointer;
+}
+
+.period-pagination .page-btn.nav:hover {
+  background: #fbe1c9;
+  color: #8a4c1d;
+}
+
 .team-picker-modal {
   position: fixed;
   inset: 0;

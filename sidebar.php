@@ -34,12 +34,12 @@ $isAdmin = in_array($role_ID, [1, 2]);
        <a class="nav-link ajax-link" href="pages/teacher_review_status.php">
       <i class="fa-solid fa-star"></i><span>互評(status)</span></a>
           <a class="nav-link ajax-link" href="pages/work_draft.php">
-      <i class="fa-solid fa-file-pen"></i><span>work_draft</span></a>
-          <a class="nav-link ajax-link" href="pages/work_save.php">
-      <i class="fa-solid fa-floppy-disk"></i><span>work_save</span></a>
+      <i class="fa-solid fa-file-pen"></i><span>查看工作日誌</span></a>
+          <!-- <a class="nav-link ajax-link" href="pages/work_save.php">
+      <i class="fa-solid fa-floppy-disk"></i><span>work_save</span></a> -->
 
           <a class="nav-link ajax-link" href="pages/work_form.php">
-      <i class="fa-solid fa-file-circle-plus"></i><span>work_form</span></a>
+      <i class="fa-solid fa-file-circle-plus"></i><span>填寫工作日誌</span></a>
 
           <a class="nav-link ajax-link" href="pages/apply_preview.php">
       <i class="fa-solid fa-eye"></i><span>apply_preview</span></a>
