@@ -1,6 +1,23 @@
 <?php
 session_start();
-$sort = $_GET['sort'] ?? 'created';  
+require '../includes/pdo.php';
+$sort = $_GET['sort'] ?? 'created';
+
+// 獲取當前用戶的角色和ID
+$currentRoleId = isset($_SESSION['role_ID']) ? (int)$_SESSION['role_ID'] : null;
+$currentUserId = isset($_SESSION['u_ID']) ? $_SESSION['u_ID'] : null;
+
+// 如果是班導，獲取班導的班級ID
+$classAdvisorClassIds = [];
+if ($currentRoleId === 3 && $currentUserId) {
+    $classStmt = $conn->prepare("
+        SELECT DISTINCT class_ID 
+        FROM enrollmentdata 
+        WHERE enroll_u_ID = ? AND enroll_status = 1 AND class_ID IS NOT NULL
+    ");
+    $classStmt->execute([$currentUserId]);
+    $classAdvisorClassIds = array_filter(array_column($classStmt->fetchAll(PDO::FETCH_ASSOC), 'class_ID'));
+}
 ?>
 
 <h3 class="mb-3">評分時段管理</h3>
@@ -51,12 +68,17 @@ $sort = $_GET['sort'] ?? 'created';
         <div class="col-md-3">
           <label class="form-label">結束日</label>
           <input type="datetime-local" class="form-control" name="period_end_d" id="period_end_d" required>
+          <?php if ($currentRoleId !== 3): ?>
           <label class="form-label mt-3">班級</label>
           <select class="form-select multi-select-list" id="classSelect" multiple size="6" aria-label="班級多選">
             <option value="">載入中...</option>
           </select>
           <small class="text-muted d-block mt-1">可多選，按住 Ctrl/Cmd 鍵；未選表示全部班級。</small>
-          <input type="hidden" name="pe_class_ID" id="class_primary" value="">
+          <?php else: ?>
+          <!-- 班導不需要選擇班級，自動使用自己的班級 -->
+          <input type="hidden" id="classSelect" value="">
+          <?php endif; ?>
+          <input type="hidden" name="pe_class_ID" id="class_primary" value="<?= !empty($classAdvisorClassIds) ? implode(',', $classAdvisorClassIds) : '' ?>">
         </div>
         <div class="col-md-3">
           <label class="form-label">標題</label>

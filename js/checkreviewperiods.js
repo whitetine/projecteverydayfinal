@@ -218,7 +218,7 @@ function setupCohortSelect() {
 
 function setupClassSelect() {
   const select = document.getElementById('classSelect');
-  if (!select) return;
+  if (!select || select.tagName !== 'SELECT') return;
   select.addEventListener('change', () => handleClassChange(true));
 }
 
@@ -285,6 +285,11 @@ function handleClassChange(triggerLoad = true) {
 function renderClassOptions(list) {
   const select = document.getElementById('classSelect');
   if (!select) return;
+  
+  // 如果是班導，classSelect 是 input 元素，不需要渲染選項
+  if (select.tagName !== 'SELECT') {
+    return;
+  }
 
   select.innerHTML = '';
   if (!Array.isArray(list) || !list.length) {
@@ -337,11 +342,21 @@ function setClassSelections(values, triggerLoad = false) {
     ? values.map(String).filter(Boolean)
     : (values ? [String(values)] : []);
   const primaryInput = document.getElementById('class_primary');
-  if (primaryInput) primaryInput.value = arr[0] || '';
-  if (!select) {
+  
+  // 如果是班導，classSelect 是 input 元素，只需要更新 class_primary
+  if (!select || select.tagName !== 'SELECT') {
+    if (primaryInput) {
+      primaryInput.value = arr.join(',');
+    }
     pendingClassValue = arr[0] || '';
+    if (triggerLoad) {
+      loadTeamList(getSelectedCohortValues(), arr);
+    }
     return;
   }
+  
+  // 正常情況：更新 select 元素
+  if (primaryInput) primaryInput.value = arr[0] || '';
   Array.from(select.options).forEach(option => {
     option.selected = arr.includes(option.value);
   });
@@ -351,9 +366,26 @@ function setClassSelections(values, triggerLoad = false) {
 }
 
 function getSelectedClassValues() {
-  const select = document.getElementById('classSelect');
-  if (!select) return [];
-  return Array.from(select.selectedOptions)
+  const classSelect = document.getElementById('classSelect');
+  const classPrimary = document.getElementById('class_primary');
+  
+  // 如果 classSelect 不存在，或者不是 select 元素（班導的情況），使用 class_primary 的值
+  if (!classSelect || classSelect.tagName !== 'SELECT') {
+    if (classPrimary && classPrimary.value) {
+      const classIds = classPrimary.value.split(',').filter(Boolean);
+      return classIds;
+    }
+    return [];
+  }
+  
+  // 如果是隱藏的 select（不應該發生，但為了安全起見）
+  if (classSelect.offsetParent === null && classPrimary && classPrimary.value) {
+    const classIds = classPrimary.value.split(',').filter(Boolean);
+    return classIds;
+  }
+  
+  // 正常情況：從 select 元素獲取選中的值
+  return Array.from(classSelect.selectedOptions)
     .map(option => option.value)
     .filter(Boolean);
 }
