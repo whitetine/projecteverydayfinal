@@ -9,7 +9,30 @@ $isAjaxRequest = isset($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER
 $perPage = max(1, min(50, (int)($_GET['per_page'] ?? 10)));
 $page = max(1, (int)($_GET['page'] ?? 1));
 $offset = ($page - 1) * $perPage;
-$totalRows = (int)($conn->query("SELECT COUNT(*) FROM perioddata")->fetchColumn() ?: 0);
+
+// 獲取當前用戶的角色和ID，用於過濾表格數據
+$currentRoleId = isset($_SESSION['role_ID']) ? (int)$_SESSION['role_ID'] : null;
+$currentUserId = isset($_SESSION['u_ID']) ? $_SESSION['u_ID'] : null;
+
+// 檢查是否有 pe_created_u_ID 欄位
+$hasCreatedUserId = false;
+try {
+    $checkStmt3 = $conn->query("SHOW COLUMNS FROM perioddata LIKE 'pe_created_u_ID'");
+    $hasCreatedUserId = $checkStmt3->rowCount() > 0;
+} catch (Exception $e) {
+    $hasCreatedUserId = false;
+}
+
+// 計算總行數（用於分頁）
+$countSql = "SELECT COUNT(*) FROM perioddata";
+if ($hasCreatedUserId && $currentUserId && in_array($currentRoleId, [3, 4])) {
+    $countSql .= " WHERE pe_created_u_ID = ?";
+    $countStmt = $conn->prepare($countSql);
+    $countStmt->execute([$currentUserId]);
+    $totalRows = (int)($countStmt->fetchColumn() ?: 0);
+} else {
+    $totalRows = (int)($conn->query($countSql)->fetchColumn() ?: 0);
+}
 $totalPages = max(1, (int)ceil($totalRows / $perPage));
 if ($page > $totalPages) {
     $page = $totalPages;
@@ -258,6 +281,220 @@ function fetchTeamsByFilters(PDO $conn, array $cohortIds, array $classIds) {
     }
     hydrateTeamInfoWithMeta($conn, $map);
     return $map;
+}
+
+/**
+ * 檢查用戶是否有權限查看指定的團隊
+ * @param PDO $conn 資料庫連接
+ * @param array $teamIds 團隊ID陣列
+ * @param int|null $roleId 角色ID
+ * @param string|null $userId 用戶ID
+ * @param array|null $cohortIds 屆別ID陣列（可選，用於進一步過濾）
+ * @return array 有權限查看的團隊ID陣列
+ */
+function filterTeamsByRole(PDO $conn, array $teamIds, $roleId, $userId, $cohortIds = null) {
+    if (empty($teamIds)) {
+        return [];
+    }
+    
+    // role_ID = 1 或 2：可以查看所有團隊
+    if (in_array($roleId, [1, 2])) {
+        return $teamIds;
+    }
+    
+    // 沒有用戶ID或角色ID，返回空陣列
+    if (!$userId || !$roleId) {
+        return [];
+    }
+    
+    $hasClassColumn = teamColumnExists($conn, 'class_ID');
+    $hasCohortColumn = teamColumnExists($conn, 'cohort_ID');
+    
+    if ($roleId === 3) {
+        // role_ID = 3 (班導)：只能查看該屆自己班級的團隊
+        $userClassStmt = $conn->prepare("
+            SELECT DISTINCT class_ID, cohort_ID 
+            FROM enrollmentdata 
+            WHERE enroll_u_ID = ? AND enroll_status = 1
+        ");
+        $userClassStmt->execute([$userId]);
+        $userClasses = $userClassStmt->fetchAll(PDO::FETCH_ASSOC);
+        
+        if (empty($userClasses)) {
+            return [];
+        }
+        
+        $userClassIds = array_filter(array_column($userClasses, 'class_ID'));
+        $userCohortIds = array_values(array_unique(array_column($userClasses, 'cohort_ID')));
+        
+        // 如果有指定屆別，只查詢用戶班級所屬的屆別
+        if ($cohortIds !== null) {
+            $userCohortIds = array_intersect($userCohortIds, $cohortIds);
+            if (empty($userCohortIds)) {
+                return [];
+            }
+        }
+        
+        if (empty($userClassIds)) {
+            return [];
+        }
+        
+        $placeholders = implode(',', array_fill(0, count($teamIds), '?'));
+        if ($hasClassColumn) {
+            $classPlaceholders = implode(',', array_fill(0, count($userClassIds), '?'));
+            $sql = "SELECT team_ID FROM teamdata 
+                    WHERE team_ID IN ($placeholders) AND class_ID IN ($classPlaceholders)";
+            $params = array_merge($teamIds, $userClassIds);
+        } else {
+            $classPlaceholders = implode(',', array_fill(0, count($userClassIds), '?'));
+            $sql = "SELECT DISTINCT tm.team_ID
+                    FROM teammember tm
+                    JOIN enrollmentdata e ON tm.team_u_ID = e.enroll_u_ID
+                    WHERE tm.team_ID IN ($placeholders) 
+                      AND e.class_ID IN ($classPlaceholders) 
+                      AND e.enroll_status = 1";
+            $params = array_merge($teamIds, $userClassIds);
+        }
+        
+        $stmt = $conn->prepare($sql);
+        $stmt->execute($params);
+        return array_column($stmt->fetchAll(PDO::FETCH_ASSOC), 'team_ID');
+        
+    } else if ($roleId === 4) {
+        // role_ID = 4 (指導老師)：只能查看該屆自己帶的團隊
+        $placeholders = implode(',', array_fill(0, count($teamIds), '?'));
+        $sql = "SELECT DISTINCT tm.team_ID
+                FROM teammember tm
+                WHERE tm.team_u_ID = ? AND tm.tm_status = 1 AND tm.team_ID IN ($placeholders)";
+        $params = array_merge([$userId], $teamIds);
+        
+        // 如果有指定屆別，進一步過濾
+        if ($cohortIds !== null && !empty($cohortIds)) {
+            $cohortPlaceholders = implode(',', array_fill(0, count($cohortIds), '?'));
+            $sql .= " AND tm.team_ID IN (
+                SELECT DISTINCT tm2.team_ID
+                FROM teammember tm2
+                JOIN enrollmentdata e ON tm2.team_u_ID = e.enroll_u_ID
+                WHERE e.cohort_ID IN ($cohortPlaceholders) AND e.enroll_status = 1
+            )";
+            $params = array_merge($params, $cohortIds);
+        }
+        
+        $stmt = $conn->prepare($sql);
+        $stmt->execute($params);
+        return array_column($stmt->fetchAll(PDO::FETCH_ASSOC), 'team_ID');
+    }
+    
+    // 其他角色：返回空陣列
+    return [];
+}
+
+/**
+ * 驗證用戶是否有權限新增指定的團隊
+ * @param PDO $conn 資料庫連接
+ * @param string $rawTargetValue 團隊選擇的原始值（可能是 'ALL' 或 JSON 或逗號分隔的ID）
+ * @param array $cohortIds 屆別ID陣列
+ * @param array $classIds 班級ID陣列
+ * @param int|null $roleId 角色ID
+ * @param string|null $userId 用戶ID
+ * @return array ['allowed' => bool, 'msg' => string, 'teamIds' => array]
+ */
+function validateTeamPermission(PDO $conn, $rawTargetValue, array $cohortIds, array $classIds, $roleId, $userId) {
+    // role_ID = 1 或 2：可以新增所有團隊
+    if (in_array($roleId, [1, 2])) {
+        return ['allowed' => true, 'msg' => '', 'teamIds' => []];
+    }
+    
+    // 沒有用戶ID或角色ID，拒絕
+    if (!$userId || !$roleId) {
+        return ['allowed' => false, 'msg' => '缺少用戶資訊', 'teamIds' => []];
+    }
+    
+    // 解析團隊選擇
+    $payload = parseTeamTarget($rawTargetValue);
+    $allTeamIds = array_merge(
+        array_map('intval', $payload['assign'] ?? []),
+        array_map('intval', $payload['receive'] ?? [])
+    );
+    
+    // 如果是 'ALL'，需要根據角色檢查屆別和班級權限
+    if ($payload['is_all']) {
+        if ($roleId === 3) {
+            // 班導：檢查是否有該屆自己班級的權限
+            $userClassStmt = $conn->prepare("
+                SELECT DISTINCT class_ID, cohort_ID 
+                FROM enrollmentdata 
+                WHERE enroll_u_ID = ? AND enroll_status = 1
+            ");
+            $userClassStmt->execute([$userId]);
+            $userClasses = $userClassStmt->fetchAll(PDO::FETCH_ASSOC);
+            
+            if (empty($userClasses)) {
+                return ['allowed' => false, 'msg' => '您沒有班級權限', 'teamIds' => []];
+            }
+            
+            $userCohortIds = array_values(array_unique(array_column($userClasses, 'cohort_ID')));
+            $userClassIds = array_filter(array_column($userClasses, 'class_ID'));
+            
+            // 檢查選擇的屆別是否在用戶權限範圍內
+            if (!empty($cohortIds)) {
+                $intersectCohorts = array_intersect($cohortIds, $userCohortIds);
+                if (empty($intersectCohorts)) {
+                    return ['allowed' => false, 'msg' => '您沒有該屆別的權限', 'teamIds' => []];
+                }
+            }
+            
+            // 檢查選擇的班級是否在用戶權限範圍內
+            if (!empty($classIds)) {
+                $intersectClasses = array_intersect($classIds, $userClassIds);
+                if (empty($intersectClasses)) {
+                    return ['allowed' => false, 'msg' => '您沒有該班級的權限', 'teamIds' => []];
+                }
+            }
+        } else if ($roleId === 4) {
+            // 指導老師：檢查是否有該屆指導團隊的權限
+            if (empty($cohortIds)) {
+                return ['allowed' => false, 'msg' => '請選擇屆別', 'teamIds' => []];
+            }
+            
+            $cohortPlaceholders = implode(',', array_fill(0, count($cohortIds), '?'));
+            $instructorTeamStmt = $conn->prepare("
+                SELECT COUNT(DISTINCT tm.team_ID) as team_count
+                FROM teammember tm
+                JOIN enrollmentdata e ON tm.team_u_ID = e.enroll_u_ID
+                WHERE tm.team_u_ID = ? AND tm.tm_status = 1 
+                  AND e.enroll_status = 1 
+                  AND e.cohort_ID IN ($cohortPlaceholders)
+            ");
+            $instructorTeamStmt->execute(array_merge([$userId], $cohortIds));
+            $teamCount = (int)$instructorTeamStmt->fetchColumn();
+            
+            if ($teamCount === 0) {
+                return ['allowed' => false, 'msg' => '您在該屆別沒有指導的團隊', 'teamIds' => []];
+            }
+        }
+        
+        return ['allowed' => true, 'msg' => '', 'teamIds' => []];
+    }
+    
+    // 有指定團隊，檢查用戶是否有權限新增這些團隊
+    if (empty($allTeamIds)) {
+        return ['allowed' => true, 'msg' => '', 'teamIds' => []];
+    }
+    
+    $allowedTeamIds = filterTeamsByRole($conn, $allTeamIds, $roleId, $userId, $cohortIds);
+    
+    // 檢查是否所有團隊都在權限範圍內
+    $disallowedTeamIds = array_diff($allTeamIds, $allowedTeamIds);
+    if (!empty($disallowedTeamIds)) {
+        return [
+            'allowed' => false, 
+            'msg' => '您沒有權限新增以下團隊：' . implode(', ', $disallowedTeamIds), 
+            'teamIds' => $disallowedTeamIds
+        ];
+    }
+    
+    return ['allowed' => true, 'msg' => '', 'teamIds' => $allowedTeamIds];
 }
 
 function fetchPeriodTargetTeams(PDO $conn, array $periodIds) {
@@ -518,14 +755,28 @@ if ($requestAction === 'create') {
         $placeholders[] = '?';
     }
 
+    // 驗證用戶是否有權限新增指定的團隊
+    $currentRoleId = isset($_SESSION['role_ID']) ? (int)$_SESSION['role_ID'] : null;
+    $currentUserId = isset($_SESSION['u_ID']) ? $_SESSION['u_ID'] : null;
+    $cohortList = getPostedCohortIdList();
+    $classList = getPostedClassIdList();
+    $validation = validateTeamPermission($conn, $_POST['pe_target_ID'] ?? '', $cohortList, $classList, $currentRoleId, $currentUserId);
+    
+    if (!$validation['allowed']) {
+        if (isset($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') {
+            header('Content-Type: application/json; charset=utf-8');
+            echo json_encode(['success' => false, 'msg' => $validation['msg']]);
+            exit;
+        }
+        die($validation['msg']);
+    }
+
     $sql = "INSERT INTO perioddata (" . implode(', ', $fields) . ")
             VALUES (" . implode(', ', $placeholders) . ")";
 
     $stmt = $conn->prepare($sql);
     $stmt->execute($values);
     $newPeriodId = (int)$conn->lastInsertId();
-    $cohortList = getPostedCohortIdList();
-    $classList = getPostedClassIdList();
     $mode = ($_POST['pe_mode'] ?? 'in') === 'cross' ? 'cross' : 'in';
     syncPeriodTargets($conn, $newPeriodId, $_POST['pe_target_ID'] ?? '', $cohortList, $classList, $mode);
     
@@ -585,14 +836,29 @@ if ($requestAction === 'update') {
         $sets[] = 'pe_status=?';
         $values[] = isset($_POST['pe_status']) ? 1 : 0;
     }
+    
+    // 驗證用戶是否有權限新增指定的團隊
+    $currentRoleId = isset($_SESSION['role_ID']) ? (int)$_SESSION['role_ID'] : null;
+    $currentUserId = isset($_SESSION['u_ID']) ? $_SESSION['u_ID'] : null;
+    $cohortList = getPostedCohortIdList();
+    $classList = getPostedClassIdList();
+    $validation = validateTeamPermission($conn, $_POST['pe_target_ID'] ?? '', $cohortList, $classList, $currentRoleId, $currentUserId);
+    
+    if (!$validation['allowed']) {
+        if (isset($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') {
+            header('Content-Type: application/json; charset=utf-8');
+            echo json_encode(['success' => false, 'msg' => $validation['msg']]);
+            exit;
+        }
+        die($validation['msg']);
+    }
+    
     $values[] = $_POST['period_ID']; // WHERE 條件
 
     $sql = "UPDATE perioddata SET " . implode(', ', $sets) . " WHERE period_ID=?";
 
     $stmt = $conn->prepare($sql);
     $stmt->execute($values);
-    $cohortList = getPostedCohortIdList();
-    $classList = getPostedClassIdList();
     $mode = ($_POST['pe_mode'] ?? 'in') === 'cross' ? 'cross' : 'in';
     syncPeriodTargets($conn, (int)($_POST['period_ID'] ?? 0), $_POST['pe_target_ID'] ?? '', $cohortList, $classList, $mode);
     
@@ -726,6 +992,10 @@ if (isset($_GET['team_list'])) {
       return $v > 0;
   });
 
+  // 獲取當前用戶的角色和ID
+  $currentRoleId = isset($_SESSION['role_ID']) ? (int)$_SESSION['role_ID'] : null;
+  $currentUserId = isset($_SESSION['u_ID']) ? $_SESSION['u_ID'] : null;
+
   $hasClassColumn = teamColumnExists($conn, 'class_ID');
   $hasCohortColumn = teamColumnExists($conn, 'cohort_ID');
 
@@ -738,13 +1008,83 @@ if (isset($_GET['team_list'])) {
           WHERE team_status = 1";
   $params = [];
 
+  // 根據角色ID添加權限限制
+  if ($currentRoleId === 3 && $currentUserId) {
+      // role_ID = 3 (班導)：只能抓該屆自己班級的團隊
+      // 獲取用戶的班級ID
+      $userClassStmt = $conn->prepare("
+          SELECT DISTINCT class_ID, cohort_ID 
+          FROM enrollmentdata 
+          WHERE enroll_u_ID = ? AND enroll_status = 1
+      ");
+      $userClassStmt->execute([$currentUserId]);
+      $userClasses = $userClassStmt->fetchAll(PDO::FETCH_ASSOC);
+      
+      if (!empty($userClasses)) {
+          $userClassIds = array_filter(array_column($userClasses, 'class_ID'));
+          $userCohortIds = array_values(array_unique(array_column($userClasses, 'cohort_ID')));
+          
+          // 只查詢用戶班級所屬的屆別
+          $ids = array_intersect($ids, $userCohortIds);
+          
+          if (empty($ids)) {
+              echo json_encode([]);
+              exit;
+          }
+          
+          if ($hasClassColumn && !empty($userClassIds)) {
+              // 如果 teamdata 有 class_ID 欄位，直接限制
+              $classPlaceholders = implode(',', array_fill(0, count($userClassIds), '?'));
+              $sql .= " AND class_ID IN ($classPlaceholders)";
+              $params = array_merge($params, $userClassIds);
+          } else if (!empty($userClassIds)) {
+              // 如果沒有 class_ID 欄位，通過 teammember 和 enrollmentdata 過濾
+              $classPlaceholders = implode(',', array_fill(0, count($userClassIds), '?'));
+              $sql .= " AND team_ID IN (
+                  SELECT DISTINCT tm.team_ID
+                  FROM teammember tm
+                  JOIN enrollmentdata e ON tm.team_u_ID = e.enroll_u_ID
+                  WHERE e.class_ID IN ($classPlaceholders) AND e.enroll_status = 1
+              )";
+              $params = array_merge($params, $userClassIds);
+          }
+      } else {
+          // 如果用戶沒有班級資料，返回空結果
+          echo json_encode([]);
+          exit;
+      }
+  } else if ($currentRoleId === 4 && $currentUserId) {
+      // role_ID = 4 (指導老師)：只能抓該屆自己帶的團隊
+      // 獲取用戶指導的團隊ID（從 teammember 表中查找 u_ID = 當前用戶ID 的團隊）
+      $placeholders = implode(',', array_fill(0, count($ids), '?'));
+      $instructorTeamStmt = $conn->prepare("
+          SELECT DISTINCT tm.team_ID
+          FROM teammember tm
+          JOIN enrollmentdata e ON tm.team_u_ID = e.enroll_u_ID
+          WHERE tm.team_u_ID = ? AND tm.tm_status = 1 AND e.enroll_status = 1 AND e.cohort_ID IN ($placeholders)
+      ");
+      $instructorTeamStmt->execute(array_merge([$currentUserId], $ids));
+      $instructorTeamIds = array_column($instructorTeamStmt->fetchAll(PDO::FETCH_ASSOC), 'team_ID');
+      
+      if (empty($instructorTeamIds)) {
+          echo json_encode([]);
+          exit;
+      }
+      
+      $teamPlaceholders = implode(',', array_fill(0, count($instructorTeamIds), '?'));
+      $sql .= " AND team_ID IN ($teamPlaceholders)";
+      $params = array_merge($params, $instructorTeamIds);
+  }
+  // role_ID = 1 或 2：不需要額外限制，可以抓取所有團隊
+
   if ($hasCohortColumn) {
       $placeholders = implode(',', array_fill(0, count($ids), '?'));
       $sql .= " AND cohort_ID IN ($placeholders)";
       $params = array_merge($params, $ids);
   }
 
-  if ($hasClassColumn && !empty($classIds)) {
+  if ($hasClassColumn && !empty($classIds) && $currentRoleId !== 3) {
+      // 只有在不是班導的情況下，才應用前端傳來的 class_id 過濾
       $classPlaceholders = implode(',', array_fill(0, count($classIds), '?'));
       $sql .= " AND class_ID IN ($classPlaceholders)";
       $params = array_merge($params, $classIds);
@@ -767,7 +1107,7 @@ if (isset($_GET['team_list'])) {
   $stmt->execute($params);
   $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-  if (!empty($rows) && (!$hasClassColumn && !empty($classIds))) {
+  if (!empty($rows) && (!$hasClassColumn && !empty($classIds) && $currentRoleId !== 3)) {
       $meta = fetchTeamEnrollmentMeta($conn, array_column($rows, 'team_ID'));
       $rows = array_values(array_filter($rows, function ($row) use ($meta, $classIds) {
           $teamId = (string)$row['team_ID'];
@@ -801,6 +1141,7 @@ try {
     $hasPeTargetId = false;
 }
 
+
 if ($hasCohortId) {
     // 如果有 cohort_ID 欄位，使用 JOIN
     if ($hasPeTargetId) {
@@ -813,14 +1154,12 @@ if ($hasCohortId) {
                 FROM perioddata p
                 LEFT JOIN cohortdata c ON p.cohort_ID = c.cohort_ID
                 LEFT JOIN teamdata t ON CAST(p.pe_target_ID AS CHAR) = CAST(t.team_ID AS CHAR) 
-                    AND p.pe_target_ID != 'ALL'
-                $orderBy";
+                    AND p.pe_target_ID != 'ALL'";
     } else {
         $sql = "SELECT p.*, c.cohort_name, c.year_label, 
                        NULL as team_project_name
                 FROM perioddata p
-                LEFT JOIN cohortdata c ON p.cohort_ID = c.cohort_ID
-                $orderBy";
+                LEFT JOIN cohortdata c ON p.cohort_ID = c.cohort_ID";
     }
 } else {
     // 如果沒有 cohort_ID 欄位，只查詢 perioddata
@@ -832,18 +1171,30 @@ if ($hasCohortId) {
                        END as team_project_name
                 FROM perioddata p
                 LEFT JOIN teamdata t ON CAST(p.pe_target_ID AS CHAR) = CAST(t.team_ID AS CHAR) 
-                    AND p.pe_target_ID != 'ALL'
-                $orderBy";
+                    AND p.pe_target_ID != 'ALL'";
     } else {
         $sql = "SELECT p.*, NULL as cohort_name, NULL as year_label,
                        NULL as team_project_name
-                FROM perioddata p
-                $orderBy";
+                FROM perioddata p";
     }
 }
+
+// 根據角色添加創建者過濾條件
+// role_ID = 1 或 2：可以查看所有時段
+// role_ID = 3 或 4：只能查看自己新增的時段
+if ($hasCreatedUserId && $currentUserId && in_array($currentRoleId, [3, 4])) {
+    $sql .= " WHERE p.pe_created_u_ID = :created_user_id";
+}
+
+// 添加 ORDER BY 子句
+$sql .= " $orderBy";
+
 $sql .= " LIMIT :limit OFFSET :offset";
 
 $stmt = $conn->prepare($sql);
+if ($hasCreatedUserId && $currentUserId && in_array($currentRoleId, [3, 4])) {
+    $stmt->bindValue(':created_user_id', $currentUserId, PDO::PARAM_STR);
+}
 $stmt->bindValue(':limit', $perPage, PDO::PARAM_INT);
 $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
 $stmt->execute();
@@ -956,6 +1307,82 @@ foreach ($rows as &$rowItem) {
     }
 }
 unset($rowItem);
+
+// 根據角色權限過濾評分時段
+$currentRoleId = isset($_SESSION['role_ID']) ? (int)$_SESSION['role_ID'] : null;
+$currentUserId = isset($_SESSION['u_ID']) ? $_SESSION['u_ID'] : null;
+
+// role_ID = 1 或 2 可以查看所有評分時段，不需要過濾
+if ($currentRoleId && $currentUserId && in_array($currentRoleId, [3, 4])) {
+    // 只有 role_ID = 3 或 4 需要過濾
+    $filteredRows = [];
+    foreach ($rows as $row) {
+        $periodId = (int)($row['period_ID'] ?? 0);
+        $targetInfo = $periodTargetMap[$periodId] ?? [
+            'assign' => [],
+            'receive' => [],
+            'cohort_ids' => []
+        ];
+        
+        // 收集所有關聯的團隊ID
+        $allTeamIds = array_merge(
+            array_map('intval', $targetInfo['assign'] ?? []),
+            array_map('intval', $targetInfo['receive'] ?? [])
+        );
+        
+        // 如果評分時段沒有指定團隊（ALL），則根據屆別判斷
+        if (empty($allTeamIds)) {
+            $cohortIds = $row['_cohort_ids'] ?? [];
+            if (empty($cohortIds)) {
+                // 沒有屆別資訊，保留（讓管理員查看）
+                if (in_array($currentRoleId, [1, 2])) {
+                    $filteredRows[] = $row;
+                }
+                continue;
+            }
+            
+            // 對於 role_ID = 3，檢查屆別是否在用戶權限範圍內
+            if ($currentRoleId === 3) {
+                $userClassStmt = $conn->prepare("
+                    SELECT DISTINCT cohort_ID 
+                    FROM enrollmentdata 
+                    WHERE enroll_u_ID = ? AND enroll_status = 1
+                ");
+                $userClassStmt->execute([$currentUserId]);
+                $userCohorts = array_column($userClassStmt->fetchAll(PDO::FETCH_ASSOC), 'cohort_ID');
+                if (!empty(array_intersect($cohortIds, $userCohorts))) {
+                    $filteredRows[] = $row;
+                }
+            } else if ($currentRoleId === 4) {
+                // 對於 role_ID = 4，檢查是否有指導的團隊在這些屆別中
+                $cohortPlaceholders = implode(',', array_fill(0, count($cohortIds), '?'));
+                $instructorTeamStmt = $conn->prepare("
+                    SELECT COUNT(DISTINCT tm.team_ID) as team_count
+                    FROM teammember tm
+                    JOIN enrollmentdata e ON tm.team_u_ID = e.enroll_u_ID
+                    WHERE tm.team_u_ID = ? AND tm.tm_status = 1 
+                      AND e.enroll_status = 1 
+                      AND e.cohort_ID IN ($cohortPlaceholders)
+                ");
+                $instructorTeamStmt->execute(array_merge([$currentUserId], $cohortIds));
+                $teamCount = (int)$instructorTeamStmt->fetchColumn();
+                if ($teamCount > 0) {
+                    $filteredRows[] = $row;
+                }
+            }
+        } else {
+            // 有指定團隊，檢查用戶是否有權限查看這些團隊
+            $cohortIds = $row['_cohort_ids'] ?? [];
+            $allowedTeamIds = filterTeamsByRole($conn, $allTeamIds, $currentRoleId, $currentUserId, $cohortIds);
+            
+            // 如果至少有一個團隊在權限範圍內，則保留該評分時段
+            if (!empty($allowedTeamIds)) {
+                $filteredRows[] = $row;
+            }
+        }
+    }
+    $rows = $filteredRows;
+}
 
 $teamNameMap = [];
 if (!empty($teamIdSet)) {
