@@ -86,7 +86,7 @@
 }
 
 .multi-select-list {
-  min-height: 210px;
+  min-height: 130px;
   border-radius: 14px;
   border: 1px solid rgba(99, 102, 241, 0.22);
   padding: .45rem .65rem;

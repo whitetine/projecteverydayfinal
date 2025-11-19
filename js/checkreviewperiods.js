@@ -10,6 +10,29 @@ function resolveCheckReviewPeriodsApiUrl() {
   return 'pages/checkreviewperiods_data.php';
 }
 
+async function parseJsonResponse(res) {
+  const clone = res.clone();
+  try {
+    return await clone.json();
+  } catch (err) {
+    let rawText = '';
+    try {
+      rawText = await res.text();
+    } catch (readErr) {
+      console.warn('回應內容讀取失敗', readErr);
+    }
+    const cleaned = (rawText || '')
+      .replace(/<[^>]*>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    const snippet = cleaned || rawText?.slice(0, 200) || `HTTP ${res.status} ${res.statusText || ''}`;
+    const error = new Error(`伺服器回傳非 JSON：${snippet}`);
+    error.raw = rawText;
+    error.status = res.status;
+    throw error;
+  }
+}
+
 let pendingClassValue = '';
 const teamPickerState = {
   enabled: true,
@@ -40,6 +63,9 @@ function __initCheckReviewPeriods() {
     // 攔截表單提交，改用 AJAX
     form.addEventListener('submit', async function(e) {
       e.preventDefault();
+      if (!validatePeriodForm()) {
+        return;
+      }
       const formData = new FormData(form);
       const action = formData.get('action');
       
@@ -52,28 +78,24 @@ function __initCheckReviewPeriods() {
           },
           body: formData
         });
-        
-        if (res.ok) {
-          const result = await res.json();
-          if (result.success) {
-            // 成功後重新載入表格並清空表單
-            await loadPeriodTable();
-            resetForm();
-            // 顯示成功訊息
-            if (window.Swal) {
-              Swal.fire({
-                title: '成功',
-                text: result.msg || (action === 'create' ? '已新增評分時段' : '已更新評分時段'),
-                icon: 'success',
-                timer: 2000,
-                showConfirmButton: false
-              });
-            }
-          } else {
-            throw new Error(result.msg || '操作失敗');
+        const result = await parseJsonResponse(res);
+        if (res.ok && result.success) {
+          // 成功後重新載入表格並清空表單
+          await loadPeriodTable();
+          resetForm();
+          // 顯示成功訊息
+          if (window.Swal) {
+            Swal.fire({
+              title: '成功',
+              text: result.msg || (action === 'create' ? '已新增評分時段' : '已更新評分時段'),
+              icon: 'success',
+              timer: 2000,
+              showConfirmButton: false
+            });
           }
         } else {
-          throw new Error('HTTP ' + res.status);
+          const fallbackMsg = result?.msg || `HTTP ${res.status}`;
+          throw new Error(fallbackMsg);
         }
       } catch (err) {
         console.error('提交失敗:', err);
@@ -94,6 +116,29 @@ function __initCheckReviewPeriods() {
   try { setupModeSelector(); } catch (e) { console.error(e); }
   try { setupTeamPicker(); } catch (e) { console.error(e); }
   try { setupStatusToggleDelegation(); } catch (e) { console.error(e); }
+}
+
+function validatePeriodForm() {
+  const startInput = document.getElementById('period_start_d');
+  const endInput = document.getElementById('period_end_d');
+  if (!startInput || !endInput) return true;
+  const startValue = startInput.value;
+  const endValue = endInput.value;
+  if (!startValue || !endValue) return true;
+  const startDate = new Date(startValue);
+  const endDate = new Date(endValue);
+  if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) return true;
+  if (endDate < startDate) {
+    const message = '結束日不可早於開始日';
+    if (window.Swal) {
+      Swal.fire('提醒', message, 'warning');
+    } else {
+      alert(message);
+    }
+    endInput.focus();
+    return false;
+  }
+  return true;
 }
 // 初始化函數
 function initCheckReviewPeriods() {
@@ -256,7 +301,7 @@ function renderClassOptions(list) {
 function loadClassList() {
   const apiUrl = resolveCheckReviewPeriodsApiUrl();
   fetch(`${apiUrl}?class_list=1`)
-    .then(r => r.json())
+    .then(parseJsonResponse)
     .then(list => {
       renderClassOptions(list);
     })
@@ -331,7 +376,7 @@ function parseTeamAssignmentPayload(raw) {
 function loadCohortList() {
   const apiUrl = resolveCheckReviewPeriodsApiUrl();
   fetch(`${apiUrl}?cohort_list=1`)
-      .then(r => r.json())
+      .then(parseJsonResponse)
       .then(list => {
           renderCohortOptions(list);
           const presetValues = (document.getElementById('cohort_values')?.value || '')
@@ -390,7 +435,7 @@ function loadTeamList(cohortId, classId, preselectTeams) {
   teamPickerState.summaryMessage = '載入團隊中...';
   updateTeamSummaryDisplay();
   fetch(`${apiUrl}?${params.toString()}`)
-    .then(r => r.json())
+    .then(parseJsonResponse)
     .then(list => {
       teamPickerState.list = Array.isArray(list) ? list : [];
       if (!teamPickerState.list.length) {
@@ -594,7 +639,7 @@ async function togglePeriodStatus(periodId, nextStatus, button) {
       headers: { 'X-Requested-With': 'XMLHttpRequest' },
       body: formData
     });
-    const result = await res.json();
+    const result = await parseJsonResponse(res);
     if (!res.ok || !result.success) {
       throw new Error(result?.msg || '切換失敗');
     }
