@@ -1,0 +1,251 @@
+/* ================================
+   suggest.css
+   科辦多筆建議系統樣式
+================================ */
+
+/* 外層區塊 */
+.suggest-wrapper {
+    padding: 15px;
+    width: 100%;
+    max-width: 1200px;
+    margin: auto;
+}
+
+.suggest-header {
+    margin-bottom: 20px;
+}
+
+.suggest-title {
+    font-size: 24px;
+    font-weight: 700;
+    margin-bottom: 4px;
+}
+
+.suggest-subtitle {
+    color: #6c757d;
+    margin: 0;
+    font-size: 14px;
+}
+
+/* 屆別選單 */
+.suggest-cohort-box {
+    margin-bottom: 20px;
+}
+
+.suggest-cohort-box label {
+    font-weight: 600;
+    margin-bottom: 6px;
+    display: block;
+}
+
+.suggest-cohort-box .form-select {
+    width: 100%;
+    max-width: 320px;
+}
+
+/* ================================
+   團隊卡片
+================================ */
+.sg-team-card {
+    background: #ffffff;
+    border: 1px solid #e0e0e0;
+    padding: 18px;
+    border-radius: 10px;
+    margin-bottom: 18px;
+    box-shadow: 0 2px 5px rgba(0,0,0,.03);
+}
+
+.sg-team-header {
+    margin-bottom: 10px;
+}
+
+.sg-team-group {
+    font-size: 14px;
+    font-weight: 600;
+    color: #0077c2;
+}
+
+.sg-team-title {
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 6px;
+}
+
+/* ================================
+   建議輸入區（textarea）
+================================ */
+.sg-textarea {
+    width: 100%;
+    min-height: 120px;
+    padding: 10px;
+    font-size: 15px;
+    border: 1px solid #cfd3d7;
+    border-radius: 8px;
+    resize: vertical;
+    line-height: 1.5;
+    transition: border .2s ease;
+    background: #fafafa;
+}
+
+.sg-textarea:focus {
+    outline: none;
+    border-color: #66a7f5;
+    background: #fff;
+}
+
+.sg-textarea-readonly {
+    background: #f5f5f5;
+    cursor: not-allowed;
+    color: #333;
+}
+
+.sg-textarea-readonly:focus {
+    border-color: #cfd3d7;
+    background: #f5f5f5;
+}
+
+/* 滑鼠 hover 顯示編號提示效果 */
+.sg-textarea::placeholder {
+    color: #9ea4aa;
+}
+
+/* ================================
+   按鈕群組
+================================ */
+.sg-btn-group {
+    margin-top: 8px;
+    display: flex;
+    gap: 8px;
+}
+
+.sg-btn-save {
+    padding: 6px 14px;
+    border-radius: 6px;
+    border: none;
+    background: #0066cc;
+    color: #fff;
+    font-size: 14px;
+    cursor: pointer;
+    transition: background .2s;
+}
+
+.sg-btn-save:hover {
+    background: #004d99;
+}
+
+.sg-btn-edit {
+    padding: 6px 14px;
+    border-radius: 6px;
+    border: none;
+    background: #28a745;
+    color: #fff;
+    font-size: 14px;
+    cursor: pointer;
+    transition: background .2s;
+}
+
+.sg-btn-edit:hover {
+    background: #218838;
+}
+
+.sg-btn-del {
+    padding: 6px 14px;
+    border-radius: 6px;
+    border: none;
+    background: #dc3545;
+    color: #fff;
+    font-size: 14px;
+    cursor: pointer;
+    transition: background .2s;
+}
+
+.sg-btn-del:hover {
+    background: #c82333;
+}
+
+.sg-btn-cancel {
+    padding: 6px 14px;
+    border-radius: 6px;
+    border: 1px solid #ccc;
+    background: #fff;
+    color: #333;
+    font-size: 14px;
+    cursor: pointer;
+    transition: background .2s;
+}
+
+.sg-btn-cancel:hover {
+    background: #f0f0f0;
+}
+
+/* ================================
+   建議列表
+================================ */
+.sg-suggest-list {
+    margin-top: 12px;
+    border-top: 1px solid #ddd;
+    padding-top: 10px;
+}
+
+.sg-suggest-item {
+    background: #f8f9fa;
+    border: 1px solid #e1e3e6;
+    border-radius: 8px;
+    padding: 10px;
+    margin-bottom: 8px;
+    display: flex;
+    flex-direction: column;
+}
+
+.sg-suggest-text {
+    font-size: 14px;
+    margin-bottom: 4px;
+    line-height: 1.6;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    display: flex;
+    align-items: flex-start;
+}
+
+.sg-suggest-number {
+    font-weight: 700;
+    color: #0066cc;
+    margin-right: 6px;
+    flex-shrink: 0;
+}
+
+.sg-suggest-content {
+    flex: 1;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    min-width: 0;
+}
+
+.sg-suggest-time {
+    font-size: 12px;
+    color: #777;
+    margin-bottom: 6px;
+}
+
+/* 刪除按鈕 */
+.sg-suggest-del {
+    align-self: flex-end;
+    font-size: 12px;
+    padding: 4px 10px;
+    background: #dc3545;
+    color: #fff;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+}
+
+.sg-suggest-del:hover {
+    background: #b02a37;
+}
+
+/* 空狀態 */
+.sg-empty {
+    color: #888;
+    font-size: 14px;
+    padding: 6px;
+}

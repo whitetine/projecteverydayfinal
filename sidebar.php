@@ -53,6 +53,8 @@ $isAdmin = in_array($role_ID, [1, 2]);
       <a class="nav-link ajax-link" href="pages/teacher_review_status.php">
       <i class="fa-solid fa-file-pen"></i><span>互評(status)</span></a>
       
+      <a class="nav-link ajax-link" href="pages/suggest.php">
+      <i class="fa-solid fa-bullhorn"></i><span>期中期末建議</span></a>
        <!-- <a class="nav-link ajax-link" href="pages/admin_notify.php">
       <i class="fa-solid fa-file-lines"></i><span>notify</span></a> -->
       <?php elseif ($role_ID == 6): ?>
