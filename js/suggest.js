@@ -26,23 +26,72 @@ const Toast = Swal.mixin({
 ========================================== */
 function initSuggest() {
     const cohortSelect = document.getElementById("sg-cohort");
-    if (!cohortSelect) {
+    const groupSelect = document.getElementById("sg-group");
+    if (!cohortSelect || !groupSelect) {
         return false;
     }
     
-    // 避免重複初始化
+    // 如果已經初始化過，先重置標記
     if (cohortSelect.dataset.initialized === 'true') {
-        return true;
+        cohortSelect.dataset.initialized = 'false';
     }
     
+    // 標記為已初始化
     cohortSelect.dataset.initialized = 'true';
     
+    // 重新載入屆別資料（每次初始化都會重新載入）
     loadCohorts();
 
-    // 當屆別改變 → 載入團隊
-    cohortSelect.addEventListener("change", () => {
-        loadTeams(cohortSelect.value);
+    // 移除舊的事件監聽器，然後添加新的
+    const newCohortSelect = cohortSelect.cloneNode(true);
+    cohortSelect.parentNode.replaceChild(newCohortSelect, cohortSelect);
+    const freshCohortSelect = document.getElementById("sg-cohort");
+    
+    const newGroupSelect = groupSelect.cloneNode(true);
+    groupSelect.parentNode.replaceChild(newGroupSelect, groupSelect);
+    const freshGroupSelect = document.getElementById("sg-group");
+    
+    // 當屆別改變 → 載入類組，然後載入團隊
+    freshCohortSelect.addEventListener("change", () => {
+        const cohortId = freshCohortSelect.value;
+        const exportBtn = document.getElementById("sg-export-btn");
+        
+        if (cohortId) {
+            loadGroups(cohortId);
+        } else {
+            freshGroupSelect.innerHTML = '<option value="">請先選擇屆別</option>';
+            freshGroupSelect.disabled = true;
+            document.getElementById("sg-team-list").innerHTML = "";
+            if (exportBtn) exportBtn.disabled = true;
+        }
     });
+    
+    // 當類組改變 → 載入團隊
+    freshGroupSelect.addEventListener("change", () => {
+        const cohortId = freshCohortSelect.value;
+        const groupId = freshGroupSelect.value;
+        const exportBtn = document.getElementById("sg-export-btn");
+        
+        if (cohortId && groupId) {
+            loadTeams(cohortId, groupId);
+            if (exportBtn) exportBtn.disabled = false;
+        } else {
+            document.getElementById("sg-team-list").innerHTML = "";
+            if (exportBtn) exportBtn.disabled = true;
+        }
+    });
+    
+    // 匯出按鈕事件
+    const exportBtn = document.getElementById("sg-export-btn");
+    if (exportBtn) {
+        exportBtn.addEventListener("click", () => {
+            const cohortId = freshCohortSelect.value;
+            const groupId = freshGroupSelect.value;
+            if (cohortId && groupId) {
+                exportSuggestions(cohortId, groupId);
+            }
+        });
+    }
     
     return true;
 }
@@ -90,6 +139,11 @@ if (!initSuggest()) {
 $(document).on('pageLoaded scriptExecuted', function(e, path) {
     if (path && path.includes('suggest')) {
         setTimeout(() => {
+            // 重置初始化標記，強制重新初始化
+            const cohortSelect = document.getElementById("sg-cohort");
+            if (cohortSelect) {
+                cohortSelect.dataset.initialized = 'false';
+            }
             if (!initSuggest()) {
                 // 如果第一次失敗，再試一次
                 setTimeout(initSuggest, 300);
@@ -97,6 +151,45 @@ $(document).on('pageLoaded scriptExecuted', function(e, path) {
         }, 200);
     }
 });
+
+// 監聽頁面載入事件（當 loadSubpage 完成後）
+// 使用 MutationObserver 監聽 #content 的變化
+const contentObserver = new MutationObserver((mutations) => {
+    mutations.forEach((mutation) => {
+        if (mutation.addedNodes.length > 0) {
+            // 檢查是否有 suggest 相關的元素被加入
+            const hasSuggest = Array.from(mutation.addedNodes).some(node => {
+                if (node.nodeType === 1) { // Element node
+                    return node.querySelector && (
+                        node.querySelector('#sg-cohort') || 
+                        node.id === 'sg-cohort' ||
+                        node.classList?.contains('suggest-wrapper')
+                    );
+                }
+                return false;
+            });
+            
+            if (hasSuggest) {
+                // 延遲一下確保 DOM 完全載入
+                setTimeout(() => {
+                    const cohortSelect = document.getElementById("sg-cohort");
+                    if (cohortSelect && cohortSelect.dataset.initialized !== 'true') {
+                        initSuggest();
+                    }
+                }, 100);
+            }
+        }
+    });
+});
+
+// 開始觀察 #content 的變化
+const contentEl = document.getElementById('content');
+if (contentEl) {
+    contentObserver.observe(contentEl, {
+        childList: true,
+        subtree: true
+    });
+}
 
 /* ==========================================
    2. 取得屆別 (cohortdata)
@@ -158,26 +251,82 @@ async function loadCohorts() {
 }
 
 /* ==========================================
+   2-1. 取得類組 (groupdata) - 依屆別
+========================================== */
+async function loadGroups(cohortId) {
+    const groupSelect = document.getElementById("sg-group");
+    if (!groupSelect) return;
+    
+    try {
+        groupSelect.innerHTML = '<option value="">載入中...</option>';
+        groupSelect.disabled = true;
+        
+        const apiUrl = resolveSuggestApiUrl();
+        const r = await fetch(`${apiUrl}?action=listGroups&cohort_ID=${cohortId}`, {
+            credentials: 'same-origin'
+        });
+        
+        if (!r.ok) {
+            throw new Error(`HTTP ${r.status}: ${r.statusText}`);
+        }
+        
+        const j = await r.json();
+        
+        if (!j.success) {
+            throw new Error(j.msg || '未知錯誤');
+        }
+        
+        groupSelect.innerHTML = '<option value="">請選擇類組</option>';
+        
+        if (j.data && Array.isArray(j.data) && j.data.length > 0) {
+            j.data.forEach(g => {
+                groupSelect.innerHTML += `
+                    <option value="${g.group_ID}">
+                        ${g.group_name}
+                    </option>`;
+            });
+            groupSelect.disabled = false;
+        } else {
+            groupSelect.innerHTML = '<option value="">該屆別無類組資料</option>';
+            groupSelect.disabled = true;
+        }
+        
+        // 清空團隊列表
+        document.getElementById("sg-team-list").innerHTML = "";
+        
+    } catch (err) {
+        console.error('載入類組失敗:', err);
+        groupSelect.innerHTML = '<option value="">載入失敗</option>';
+        groupSelect.disabled = true;
+        Toast.fire({ 
+            icon: "error", 
+            title: "類組載入失敗",
+            text: err.message || '請檢查網路連線'
+        });
+    }
+}
+
+/* ==========================================
    3. 取得團隊列表 (teamdata + groupdata)
 ========================================== */
-async function loadTeams(cohortId) {
+async function loadTeams(cohortId, groupId) {
     const box = document.getElementById("sg-team-list");
     box.innerHTML = "<p>載入中...</p>";
 
-    if (!cohortId) {
+    if (!cohortId || !groupId) {
         box.innerHTML = "";
         return;
     }
 
     try {
         const apiUrl = resolveSuggestApiUrl();
-        const r = await fetch(`${apiUrl}?action=listTeams&cohort_ID=${cohortId}`);
+        const r = await fetch(`${apiUrl}?action=listTeams&cohort_ID=${cohortId}&group_ID=${groupId}`);
         const j = await r.json();
 
         if (!j.success) throw j.msg;
 
         if (j.data.length === 0) {
-            box.innerHTML = "<p>該屆別沒有團隊</p>";
+            box.innerHTML = "<p>該屆別和類組沒有團隊</p>";
             return;
         }
 
@@ -421,5 +570,51 @@ async function deleteSuggest(id, teamId) {
 
     } catch (err) {
         Toast.fire({ icon: "error", title: "刪除失敗" });
+    }
+}
+
+/* ==========================================
+   9. 匯出建議
+========================================== */
+async function exportSuggestions(cohortId, groupId) {
+    const apiUrl = resolveSuggestApiUrl();
+    
+    // 先檢查所有團隊是否都有建議
+    try {
+        const checkResponse = await fetch(`${apiUrl}?action=checkAllTeamsHaveSuggest&cohort_ID=${cohortId}&group_ID=${groupId}`);
+        const checkData = await checkResponse.json();
+        
+        if (!checkData.success) {
+            // 如果有團隊沒有建議，顯示錯誤訊息
+            const teamsList = checkData.teamsWithoutSuggest ? checkData.teamsWithoutSuggest.join('、') : '';
+            Toast.fire({
+                icon: "error",
+                title: checkData.msg || "部分團隊尚未填寫建議",
+                html: teamsList ? `<div>以下團隊尚未填寫建議：<br><strong>${teamsList}</strong></div>` : undefined
+            });
+            return;
+        }
+        
+        // 所有團隊都有建議，繼續匯出
+        const path = window.location.pathname || '';
+        let exportUrl = 'pages/suggest_export.php';
+        if (path.includes('/pages/')) {
+            exportUrl = 'suggest_export.php';
+        }
+        
+        const params = new URLSearchParams({
+            cohort_ID: cohortId,
+            group_ID: groupId
+        });
+        
+        // 開啟新視窗下載 PDF
+        window.open(`${exportUrl}?${params.toString()}`, '_blank');
+        
+    } catch (error) {
+        console.error('檢查建議時發生錯誤:', error);
+        Toast.fire({
+            icon: "error",
+            title: "檢查建議時發生錯誤，請稍後再試"
+        });
     }
 }

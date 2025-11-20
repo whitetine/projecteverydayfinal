@@ -73,12 +73,47 @@ if ($action === "listCohorts") {
 }
 
 /* ==========================================
+   action: listGroups
+   取得該屆的類組列表
+========================================== */
+if ($action === "listGroups") {
+
+    $cohort_ID = $_GET["cohort_ID"] ?? 0;
+    
+    if (!$cohort_ID) {
+        respond(["success" => false, "msg" => "缺少屆別參數"]);
+    }
+
+    $sql = "SELECT DISTINCT 
+                g.group_ID,
+                g.group_name
+            FROM groupdata g
+            JOIN teamdata t ON t.group_ID = g.group_ID
+            WHERE t.cohort_ID = ?
+              AND t.team_status = 1
+              AND g.group_status = 1
+            ORDER BY g.group_ID";
+
+    $stmt = $conn->prepare($sql);
+    $stmt->execute([$cohort_ID]);
+
+    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    respond(["success" => true, "data" => $rows]);
+}
+
+/* ==========================================
    action: listTeams
-   取得該屆團隊 + 群組
+   取得該屆和類組的團隊
 ========================================== */
 if ($action === "listTeams") {
 
     $cohort_ID = $_GET["cohort_ID"] ?? 0;
+    $group_ID = $_GET["group_ID"] ?? 0;
+
+    if (!$cohort_ID || !$group_ID) {
+        respond(["success" => false, "msg" => "缺少參數"]);
+    }
 
     $sql = "SELECT 
                 t.team_ID,
@@ -87,15 +122,75 @@ if ($action === "listTeams") {
             FROM teamdata t
             JOIN groupdata g ON t.group_ID = g.group_ID
             WHERE t.cohort_ID = ?
+              AND t.group_ID = ?
               AND t.team_status = 1
-            ORDER BY g.group_ID, t.team_ID";
+            ORDER BY t.team_ID";
 
     $stmt = $conn->prepare($sql);
-    $stmt->execute([$cohort_ID]);
+    $stmt->execute([$cohort_ID, $group_ID]);
 
     $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
     respond(["success" => true, "data" => $rows]);
+}
+
+/* ==========================================
+   action: checkAllTeamsHaveSuggest
+   檢查該屆別和類組的所有團隊是否都有建議
+========================================== */
+if ($action === "checkAllTeamsHaveSuggest") {
+    
+    $cohort_ID = $_GET["cohort_ID"] ?? 0;
+    $group_ID = $_GET["group_ID"] ?? 0;
+    
+    if (!$cohort_ID || !$group_ID) {
+        respond(["success" => false, "msg" => "缺少參數"]);
+    }
+    
+    // 取得該屆別和類組的所有團隊
+    $sql = "SELECT t.team_ID, t.team_project_name
+            FROM teamdata t
+            WHERE t.cohort_ID = ?
+              AND t.group_ID = ?
+              AND t.team_status = 1
+            ORDER BY t.team_ID";
+    
+    $stmt = $conn->prepare($sql);
+    $stmt->execute([$cohort_ID, $group_ID]);
+    $teams = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    
+    if (count($teams) === 0) {
+        respond(["success" => false, "msg" => "沒有找到任何團隊"]);
+    }
+    
+    // 檢查每個團隊是否有建議
+    $teamsWithoutSuggest = [];
+    foreach ($teams as $team) {
+        $team_ID = $team['team_ID'];
+        
+        $sql = "SELECT COUNT(*) as count 
+                FROM suggest 
+                WHERE team_ID = ? 
+                  AND suggest_status = 1";
+        
+        $stmt = $conn->prepare($sql);
+        $stmt->execute([$team_ID]);
+        $result = $stmt->fetch(PDO::FETCH_ASSOC);
+        
+        if ($result['count'] == 0) {
+            $teamsWithoutSuggest[] = $team['team_project_name'];
+        }
+    }
+    
+    if (count($teamsWithoutSuggest) > 0) {
+        respond([
+            "success" => false, 
+            "msg" => "以下團隊尚未填寫建議：" . implode("、", $teamsWithoutSuggest),
+            "teamsWithoutSuggest" => $teamsWithoutSuggest
+        ]);
+    }
+    
+    respond(["success" => true, "msg" => "所有團隊都已填寫建議"]);
 }
 
 /* ==========================================

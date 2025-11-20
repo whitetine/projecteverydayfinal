@@ -1,6 +1,6 @@
 /* ================================
    suggest.css
-   科辦多筆建議系統樣式
+   科辦多筆建議系統樣式（最終版）
 ================================ */
 
 /* 外層區塊 */
@@ -11,43 +11,94 @@
     margin: auto;
 }
 
+/* 標題 */
 .suggest-header {
     margin-bottom: 20px;
 }
-
 .suggest-title {
     font-size: 24px;
     font-weight: 700;
     margin-bottom: 4px;
 }
-
 .suggest-subtitle {
     color: #6c757d;
     margin: 0;
     font-size: 14px;
 }
 
-/* 屆別選單 */
-.suggest-cohort-box {
+/* ================================
+   篩選區塊
+================================ */
+.suggest-filter-box {
+    display: flex;
+    gap: 12px;
     margin-bottom: 20px;
+    flex-wrap: nowrap;
+    align-items: flex-end;
 }
 
-.suggest-cohort-box label {
+/* 屆別固定 240 */
+.suggest-cohort-box {
+    flex: 0 0 240px;
+}
+
+/* 類組固定 240 */
+.suggest-group-box {
+    flex: 0 0 240px;
+}
+
+/* label */
+.suggest-cohort-box label,
+.suggest-group-box label {
     font-weight: 600;
     margin-bottom: 6px;
     display: block;
 }
 
+/* select 等寬 */
 .suggest-cohort-box .form-select {
     width: 100%;
-    max-width: 320px;
+    max-width: 240px;
+}
+.suggest-group-box .form-select {
+    width: 100%;
+    max-width: 240px;
+}
+
+/* 類組 + 匯出按鈕排成同一列 */
+.suggest-group-controls {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+/* 匯出按鈕加大版 */
+.sg-btn-export {
+    padding: 10px 24px;
+    border-radius: 8px;
+    border: none;
+    background: #1e9a3c;
+    color: #fff;
+    font-size: 15px;
+    white-space: nowrap;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background .2s;
+}
+.sg-btn-export:hover:not(:disabled) {
+    background: #188532;
+}
+.sg-btn-export:disabled {
+    background: #6c757d;
+    cursor: not-allowed;
+    opacity: 0.6;
 }
 
 /* ================================
    團隊卡片
 ================================ */
 .sg-team-card {
-    background: #ffffff;
+    background: #fff;
     border: 1px solid #e0e0e0;
     padding: 18px;
     border-radius: 10px;
@@ -72,7 +123,7 @@
 }
 
 /* ================================
-   建議輸入區（textarea）
+   textarea
 ================================ */
 .sg-textarea {
     width: 100%;
@@ -86,27 +137,10 @@
     transition: border .2s ease;
     background: #fafafa;
 }
-
 .sg-textarea:focus {
     outline: none;
     border-color: #66a7f5;
     background: #fff;
-}
-
-.sg-textarea-readonly {
-    background: #f5f5f5;
-    cursor: not-allowed;
-    color: #333;
-}
-
-.sg-textarea-readonly:focus {
-    border-color: #cfd3d7;
-    background: #f5f5f5;
-}
-
-/* 滑鼠 hover 顯示編號提示效果 */
-.sg-textarea::placeholder {
-    color: #9ea4aa;
 }
 
 /* ================================
@@ -126,26 +160,9 @@
     color: #fff;
     font-size: 14px;
     cursor: pointer;
-    transition: background .2s;
 }
-
 .sg-btn-save:hover {
     background: #004d99;
-}
-
-.sg-btn-edit {
-    padding: 6px 14px;
-    border-radius: 6px;
-    border: none;
-    background: #28a745;
-    color: #fff;
-    font-size: 14px;
-    cursor: pointer;
-    transition: background .2s;
-}
-
-.sg-btn-edit:hover {
-    background: #218838;
 }
 
 .sg-btn-del {
@@ -155,27 +172,9 @@
     background: #dc3545;
     color: #fff;
     font-size: 14px;
-    cursor: pointer;
-    transition: background .2s;
 }
-
 .sg-btn-del:hover {
-    background: #c82333;
-}
-
-.sg-btn-cancel {
-    padding: 6px 14px;
-    border-radius: 6px;
-    border: 1px solid #ccc;
-    background: #fff;
-    color: #333;
-    font-size: 14px;
-    cursor: pointer;
-    transition: background .2s;
-}
-
-.sg-btn-cancel:hover {
-    background: #f0f0f0;
+    background: #b02a37;
 }
 
 /* ================================
@@ -201,24 +200,16 @@
     font-size: 14px;
     margin-bottom: 4px;
     line-height: 1.6;
-    word-wrap: break-word;
-    overflow-wrap: break-word;
     display: flex;
-    align-items: flex-start;
 }
 
 .sg-suggest-number {
     font-weight: 700;
     color: #0066cc;
     margin-right: 6px;
-    flex-shrink: 0;
 }
-
 .sg-suggest-content {
     flex: 1;
-    word-wrap: break-word;
-    overflow-wrap: break-word;
-    min-width: 0;
 }
 
 .sg-suggest-time {
@@ -227,7 +218,6 @@
     margin-bottom: 6px;
 }
 
-/* 刪除按鈕 */
 .sg-suggest-del {
     align-self: flex-end;
     font-size: 12px;
@@ -236,14 +226,11 @@
     color: #fff;
     border: none;
     border-radius: 5px;
-    cursor: pointer;
 }
-
 .sg-suggest-del:hover {
     background: #b02a37;
 }
 
-/* 空狀態 */
 .sg-empty {
     color: #888;
     font-size: 14px;
