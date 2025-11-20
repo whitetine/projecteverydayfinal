@@ -342,7 +342,37 @@ session_start();
         });
     }
 
-    if (!window.reqVueApp) {
+    // 只初始化一次 requirement Vue App
+    if (!window._reqAppInitialized) {
+        window._reqAppInitialized = true;
+
+        // 清理函式
+        function cleanupReqApp() {
+            if (window.reqVueApp && typeof window.reqVueApp.unmount === 'function') {
+                try {
+                    window.reqVueApp.unmount();
+                    window.reqVueApp = null;
+                } catch (e) {
+                    console.warn('卸載 requirement app 時出錯:', e);
+                }
+            }
+            // 重置標記，允許重新初始化
+            window._reqAppInitialized = false;
+        }
+
+        // 如果已經存在 app，先卸載
+        cleanupReqApp();
+
+        // 監聽頁面切換事件，自動清理
+        // 移除舊的監聽器（如果存在），避免重複監聽
+        const oldHandler = window._reqCleanupHandler;
+        if (oldHandler) {
+            window.removeEventListener('pageBeforeUnload', oldHandler);
+        }
+        window._reqCleanupHandler = cleanupReqApp;
+        window.addEventListener('pageBeforeUnload', cleanupReqApp);
+
+        // ✅ 建立新的 Vue App
         window.reqVueApp = Vue.createApp({
             data() {
                 return {
@@ -359,7 +389,7 @@ session_start();
                     cohort: [],
                     type: [],
                     filter_allreq: [],
-                    filter_allreq: [],
+                    allreq: [],        // 補上 allreq，給篩選用
                     form: {
                         count1: "",
                         count2: "",
@@ -378,6 +408,7 @@ session_start();
                     searchText: "",
                     searchGroup: "",
                     tableORcard: true,
+                    isPressed: false,
                 }
             },
             methods: {
@@ -388,7 +419,8 @@ session_start();
                     })
                 },
                 req_del(ID, number) {
-                    $.post("../modules/requirement.php?do=req_del", { ID: ID, number: number }).done(() => { this.get_req_ch() })
+                    $.post("../modules/requirement.php?do=req_del", { ID: ID, number: number })
+                        .done(() => { this.get_req_ch() })
                     toast({ type: 'success', title: '狀態已更新' });
                 },
                 req_edit_modal(key) {
@@ -407,7 +439,8 @@ session_start();
                     $.post("../modules/requirement.php?do=get_all_group", item => {
                         this.group = JSON.parse(item)
                     })
-                }, select_team() {
+                },
+                select_team() {
                     $.post("../modules/requirement.php?do=select_team", item => {
                         this.team = JSON.parse(item)
                     })
@@ -419,10 +452,12 @@ session_start();
                     $.post("../modules/requirement.php?do=get_type", item => {
                         this.type = JSON.parse(item)
                     })
-                }, new_progress_all_show() {
+                },
+                new_progress_all_show() {
                     this.get_cohortANDtype()
                     $('#new_progress_all').modal('show')
-                }, new_progress_all_close() {
+                },
+                new_progress_all_close() {
                     $('#new_progress_all').modal('hide')
                     this.new_progress.count_number = 1
                     this.form = {
@@ -440,9 +475,21 @@ session_start();
                         group_ID: "",
                     }
                     this.new_progress.group_ID = ""
-                }, new_p_submit() {//送出編輯 & 確定新增
-                    if (!document.getElementById("title").value || !document.getElementById("describe").value || (!this.new_progress.group_ID && !this.new_progress.team_ID) || !document.getElementById("startdate").value || !document.getElementById("cohort").value || !document.getElementById("type").value) {
-                        toast({ type: 'error', title: '送出失敗', text: '請輸入完整資料！(類組、屆別、分類、標題、說明、開始時間)' })
+                },
+                new_p_submit() { //送出編輯 & 確定新增
+                    if (
+                        !document.getElementById("title").value ||
+                        !document.getElementById("describe").value ||
+                        (!this.new_progress.group_ID && !this.new_progress.team_ID) ||
+                        !document.getElementById("startdate").value ||
+                        !document.getElementById("cohort").value ||
+                        !document.getElementById("type").value
+                    ) {
+                        toast({
+                            type: 'error',
+                            title: '送出失敗',
+                            text: '請輸入完整資料！(類組、屆別、分類、標題、說明、開始時間)'
+                        })
                     } else {
                         this.form.group_ID = this.new_progress.group_ID
                         $.post("../modules/requirement.php?do=new_progress_all", this.form)
@@ -453,28 +500,41 @@ session_start();
                                 this.new_progress_all_close()
                             })
                     }
-                }, toggleButton() {
+                },
+                toggleButton() {
                     this.isPressed = !this.isPressed
-                }, get_today() {//抓今天日期，給日期選擇器做最小值
+                },
+                get_today() { //抓今天日期，給日期選擇器做最小值
                     const today = new Date();
                     const y = today.getFullYear();
                     const m = String(today.getMonth() + 1).padStart(2, '0');
                     const d = String(today.getDate()).padStart(2, '0');
                     this.today = `${y}-${m}-${d}`;
                     this.form.req_start_d = `${y}-${m}-${d}`;
-                }, go_type() {
+                },
+                go_type() {
                     location.href = "main.php#pages/type.php";
                     this.new_progress_all_close()
-                }, clearFilters() {
-                    //篩選 清除按鈕
+                },
+                clearFilters() {
+                    // 篩選 清除按鈕
                     this.statusFilter = ""
                     this.searchText = ""
                     this.searchGroup = ""
                     this.filter_allreq = this.allreq
-                }, filter_change_req() {
-                    this.filter_allreq = this.allreq.filter(item => item.req_title.includes(this.searchText))
-                    this.statusFilter != "" ? this.filter_allreq = this.filter_allreq.filter(item => item.req_status == this.statusFilter) : ""
-                    this.searchGroup != "" ? this.filter_allreq = this.filter_allreq.filter(item => item.group_ID == this.searchGroup) : ""
+                },
+                filter_change_req() {
+                    this.filter_allreq = this.allreq.filter(item =>
+                        item.req_title.includes(this.searchText)
+                    )
+                    this.statusFilter != "" &&
+                        (this.filter_allreq = this.filter_allreq.filter(
+                            item => item.req_status == this.statusFilter
+                        ))
+                    this.searchGroup != "" &&
+                        (this.filter_allreq = this.filter_allreq.filter(
+                            item => item.group_ID == this.searchGroup
+                        ))
                 }
             },
             mounted() {
@@ -487,6 +547,6 @@ session_start();
                     this.select_team()
                 }
             }
-        }).mount("#req_app")
+        }).mount("#req_app");
     }
 </script>
