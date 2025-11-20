@@ -108,98 +108,14 @@ if (!$stmt->fetchColumn()) {
         </div>
     </div>
 
-    <!-- 里程碑列表 -->
-    <div class="milestones-grid" v-if="milestones.length > 0">
+    <!-- 里程碑列表（長條顯示） -->
+    <div class="milestones-list" v-if="milestones.length > 0">
         <div v-for="milestone in filteredMilestones" 
              :key="milestone.ms_ID" 
-             class="milestone-card"
-             :class="getStatusClass(milestone.ms_status)"
-             @click="selectMilestone(milestone)">
-            <!-- 卡片頂部 -->
-            <div class="card-header-section">
-                <div style="display: flex; align-items: center; gap: 0.5rem;">
-                    <div class="status-badge" v-if="Number(milestone.ms_status) !== 0" :class="getStatusBadgeClass(milestone.ms_status)">
-                        {{ getStatusText(milestone.ms_status) }}
-                    </div>
-                    <div class="priority-badge" :class="getPriorityClass(milestone.ms_priority || 0)">
-                        {{ getPriorityText(milestone.ms_priority || 0) }}
-                    </div>
-                </div>
-                <div class="card-actions">
-                    <button class="btn-icon" @click.stop="editMilestone(milestone)" title="編輯">編輯</button>
-                    <button class="btn-icon btn-danger" @click.stop="deleteMilestone(milestone)" title="刪除">刪除</button>
-                </div>
-            </div>
-
-            <!-- 卡片內容 -->
-            <div class="card-content">
-                <!-- 團隊資訊（最上方） -->
-                <div class="team-info" v-if="milestone.team_name">
-                    <span>{{ milestone.team_name }}</span>
-                </div>
-                
-                <!-- 基本需求（團隊下方） -->
-                <div class="requirement-link" v-if="milestone.req_title">
-                    <span>{{ milestone.req_title }}</span>
-                </div>
-                <div class="requirement-link text-muted" v-else>
-                    <span>未關聯基本需求</span>
-                </div>
-
-                <!-- 標題（基本需求下方） -->
-                <h3 class="milestone-title">{{ milestone.ms_title }}</h3>
-                
-                <!-- 說明（標題下方，若無說明也顯示欄位） -->
-                <p class="milestone-desc" v-if="milestone.ms_desc">{{ milestone.ms_desc }}</p>
-                <p class="milestone-desc text-muted" v-else>無說明</p>
-
-                <!-- 時間資訊 -->
-                <div class="time-info">
-                    <div class="time-item">
-                        <span><strong>開始：</strong>{{ formatDate(milestone.ms_start_d) }}</span>
-                    </div>
-                    <div class="time-item">
-                        <span><strong>截止：</strong>{{ formatDate(milestone.ms_end_d) }}</span>
-                    </div>
-                </div>
-
-                <!-- 完成資訊 -->
-                <div class="completion-info" v-if="milestone.ms_completed_d">
-                    <div>
-                        <div><strong>完成時間：</strong>{{ formatDateTime(milestone.ms_completed_d) }}</div>
-                        <div v-if="milestone.completer_name" style="font-size: 0.85rem; color: #64748b; margin-top: 0.25rem;">
-                            完成者：{{ milestone.completer_name }}
-                        </div>
-                    </div>
-                </div>
-
-                <!-- 審核資訊 -->
-                <div class="approval-info" v-if="milestone.ms_approved_d">
-                    <div>
-                        <div><strong>通過時間：</strong>{{ formatDateTime(milestone.ms_approved_d) }}</div>
-                        <div v-if="milestone.approver_name" style="font-size: 0.85rem; color: #64748b; margin-top: 0.25rem;">
-                            審核人：{{ milestone.approver_name }}
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- 卡片底部操作 -->
-            <!-- 還未開始狀態顯示 -->
-            <div class="card-footer" v-if="Number(milestone.ms_status) === 0" style="padding-top: 1rem; border-top: 2px solid rgba(226, 232, 240, 0.5); margin-top: 0.5rem;">
-                <div class="status-badge" :class="getStatusBadgeClass(milestone.ms_status)" style="width: 100%; justify-content: center;">
-                    {{ getStatusText(milestone.ms_status) }}
-                </div>
-            </div>
-            <!-- 待審核狀態顯示完成和退回按鈕 -->
-            <div class="card-footer" v-if="Number(milestone.ms_status) === 4" style="padding-top: 1rem; border-top: 2px solid rgba(226, 232, 240, 0.5); margin-top: 0.5rem;">
-                <button class="btn-action btn-approve" @click.stop="approveMilestone(milestone, 'approve')">
-                    完成
-                </button>
-                <button class="btn-action btn-reject" style="margin-top:0.5rem" @click.stop="approveMilestone(milestone, 'reject')">
-                    退回
-                </button>
-            </div>
+             class="milestone-bar"
+             :class="getStatusBarClass(milestone.ms_status)"
+             @click="showMilestoneDetail(milestone)">
+            <div class="bar-label">{{ milestone.ms_title }}</div>
         </div>
     </div>
 
@@ -210,6 +126,99 @@ if (!$stmt->fetchColumn()) {
         </div>
         <h3>尚無里程碑</h3>
         <p>點擊上方「新增里程碑」按鈕來建立第一個里程碑</p>
+    </div>
+
+    <!-- 里程碑詳細資訊 Modal -->
+    <div class="milestone-detail-modal" v-if="selectedMilestone" @click.self="closeMilestoneDetail">
+        <div class="milestone-detail-content">
+            <div class="milestone-detail-header">
+                <div class="status-badges">
+                    <span class="status-badge" :class="getStatusBadgeClass(selectedMilestone.ms_status)">
+                        {{ getStatusText(selectedMilestone.ms_status) }}
+                    </span>
+                    <span class="priority-badge" :class="getPriorityClass(selectedMilestone.ms_priority || 0)">
+                        {{ getPriorityText(selectedMilestone.ms_priority || 0) }}
+                    </span>
+                </div>
+                <div class="modal-actions">
+                    <button class="btn-icon" @click.stop="editMilestone(selectedMilestone)" title="編輯">編輯</button>
+                    <button class="btn-icon btn-danger" @click.stop="deleteMilestone(selectedMilestone)" title="刪除">刪除</button>
+                </div>
+            </div>
+            
+            <div class="milestone-detail-body">
+                <!-- 團隊資訊（最上方） -->
+                <div class="team-info" v-if="selectedMilestone.team_name">
+                    <span>{{ selectedMilestone.team_name }}</span>
+                </div>
+                
+                <!-- 基本需求（團隊下方） -->
+                <div class="requirement-link" v-if="selectedMilestone.req_title">
+                    <span>{{ selectedMilestone.req_title }}</span>
+                </div>
+                <div class="requirement-link text-muted" v-else>
+                    <span>未關聯基本需求</span>
+                </div>
+
+                <!-- 標題（基本需求下方） -->
+                <h3 class="milestone-title">{{ selectedMilestone.ms_title }}</h3>
+                
+                <!-- 說明（標題下方，若無說明也顯示欄位） -->
+                <p class="milestone-desc" v-if="selectedMilestone.ms_desc">{{ selectedMilestone.ms_desc }}</p>
+                <p class="milestone-desc text-muted" v-else>無說明</p>
+
+                <!-- 時間資訊 -->
+                <div class="time-info">
+                    <div class="time-item">
+                        <span><strong>開始：</strong>{{ formatDate(selectedMilestone.ms_start_d) }}</span>
+                    </div>
+                    <div class="time-item">
+                        <span><strong>截止：</strong>{{ formatDate(selectedMilestone.ms_end_d) }}</span>
+                    </div>
+                </div>
+
+                <!-- 完成資訊 -->
+                <div class="completion-info" v-if="selectedMilestone.ms_completed_d">
+                    <div>
+                        <div><strong>完成時間：</strong>{{ formatDateTime(selectedMilestone.ms_completed_d) }}</div>
+                        <div v-if="selectedMilestone.completer_name" style="font-size: 0.85rem; color: #64748b; margin-top: 0.25rem;">
+                            完成者：{{ selectedMilestone.completer_name }}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 審核資訊 -->
+                <div class="approval-info" v-if="selectedMilestone.ms_approved_d">
+                    <div>
+                        <div><strong>通過時間：</strong>{{ formatDateTime(selectedMilestone.ms_approved_d) }}</div>
+                        <div v-if="selectedMilestone.approver_name" style="font-size: 0.85rem; color: #64748b; margin-top: 0.25rem;">
+                            審核人：{{ selectedMilestone.approver_name }}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 卡片底部操作 -->
+            <!-- 還未開始狀態顯示 -->
+            <div class="milestone-detail-footer" v-if="Number(selectedMilestone.ms_status) === 0">
+                <div class="status-badge" :class="getStatusBadgeClass(selectedMilestone.ms_status)" style="width: 100%; justify-content: center;">
+                    {{ getStatusText(selectedMilestone.ms_status) }}
+                </div>
+            </div>
+            <!-- 待審核狀態顯示完成和退回按鈕 -->
+            <div class="milestone-detail-footer" v-if="Number(selectedMilestone.ms_status) === 4">
+                <button class="btn-action btn-approve" @click.stop="approveMilestone(selectedMilestone, 'approve')">
+                    完成
+                </button>
+                <button class="btn-action btn-reject" style="margin-top:0.5rem" @click.stop="approveMilestone(selectedMilestone, 'reject')">
+                    退回
+                </button>
+            </div>
+            
+            <div class="milestone-detail-footer" v-if="Number(selectedMilestone.ms_status) !== 0 && Number(selectedMilestone.ms_status) !== 4">
+                <button class="btn-close" @click="closeMilestoneDetail">關閉</button>
+            </div>
+        </div>
     </div>
 
     <!-- 新增/編輯里程碑 Modal -->
@@ -270,14 +279,19 @@ if (!$stmt->fetchColumn()) {
                             <label>
                                 開始時間 <span class="text-danger">*</span>
                             </label>
-                            <input type="datetime-local" v-model="form.ms_start_d" required class="form-control">
+                            <input type="datetime-local" v-model="form.ms_start_d" required class="form-control" 
+                                   @change="validateTimeRange" @input="validateTimeRange">
                         </div>
 
                         <div class="form-group">
                             <label>
                                 截止時間 <span class="text-danger">*</span>
                             </label>
-                            <input type="datetime-local" v-model="form.ms_end_d" required class="form-control">
+                            <input type="datetime-local" v-model="form.ms_end_d" required class="form-control" 
+                                   @change="validateTimeRange" @input="validateTimeRange">
+                            <small v-if="timeError" class="text-danger" style="display: block; margin-top: 0.25rem;">
+                                {{ timeError }}
+                            </small>
                         </div>
                     </div>
 

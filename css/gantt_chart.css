@@ -100,16 +100,15 @@
 .gantt-header-row {
     background: #f8fafc;
     font-weight: 600;
-    position: sticky;
-    top: 0;
-    z-index: 10;
+    color: #475569;
     border-bottom: 2px solid #cbd5e1;
 }
 
 .gantt-task-name {
-    width: 250px;
-    min-width: 250px;
+    width: 200px;
     padding: 1rem;
+    font-size: 0.9rem;
+    color: #1e293b;
     border-right: 1px solid #e2e8f0;
     display: flex;
     flex-direction: column;
@@ -119,7 +118,6 @@
 .task-title {
     font-weight: 600;
     color: #1e293b;
-    font-size: 0.95rem;
 }
 
 .task-meta {
@@ -128,8 +126,7 @@
     flex-wrap: wrap;
 }
 
-.task-status,
-.task-priority {
+.task-status {
     padding: 0.25rem 0.5rem;
     border-radius: 4px;
     font-size: 0.75rem;
@@ -137,7 +134,7 @@
 }
 
 .task-status.not-started {
-    background: #f1f5f9;
+    background: #e2e8f0;
     color: #475569;
 }
 
@@ -147,8 +144,8 @@
 }
 
 .task-status.rejected {
-    background: #fee2e2;
-    color: #b91c1c;
+    background: #fed7aa;
+    color: #9a3412;
 }
 
 .task-status.completed {
@@ -161,8 +158,15 @@
     color: #1e40af;
 }
 
+.task-priority {
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+
 .task-priority.normal {
-    background: #e2e8f0;
+    background: #f1f5f9;
     color: #475569;
 }
 
@@ -173,7 +177,7 @@
 
 .task-priority.urgent {
     background: #fed7aa;
-    color: #c2410c;
+    color: #9a3412;
 }
 
 .task-priority.super-urgent {
@@ -208,6 +212,7 @@
     position: relative;
     height: 60px;
     margin-top: 10px;
+    z-index: 1;
 }
 
 .gantt-bar {
@@ -223,39 +228,60 @@
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
     transition: all 0.3s ease;
     cursor: pointer;
-    overflow: hidden;
+    overflow: visible;
 }
 
 .gantt-bar:hover {
     transform: translateY(-2px);
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
-    z-index: 5;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
 }
 
 .gantt-bar.not-started {
     background: linear-gradient(135deg, #94a3b8 0%, #64748b 100%);
+    border-left: 4px solid #64748b;
 }
 
 .gantt-bar.in-progress {
     background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+    border-left: 4px solid #d97706;
 }
 
 .gantt-bar.rejected {
     background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
+    border-left: 4px solid #ea580c;
 }
 
 .gantt-bar.completed {
     background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    border-left: 4px solid #059669;
 }
 
 .gantt-bar.review {
     background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+    border-left: 4px solid #2563eb;
 }
 
 .bar-label {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+
+/* 自定義 tooltip 樣式（使用 JavaScript 動態創建） */
+.gantt-custom-tooltip {
+    position: fixed;
+    background: rgba(0, 0, 0, 0.95);
+    color: white;
+    padding: 0.5rem 0.75rem;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    white-space: pre-line;
+    z-index: 9999;
+    pointer-events: none;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    line-height: 1.5;
+    max-width: 250px;
+    word-wrap: break-word;
 }
 
 .empty-state {
@@ -273,28 +299,280 @@
 }
 
 .empty-text {
-    font-size: 1.25rem;
+    font-size: 1.1rem;
     color: #64748b;
     margin-bottom: 0.5rem;
 }
 
 .empty-hint {
-    font-size: 0.95rem;
+    font-size: 0.9rem;
     color: #94a3b8;
 }
 
+/* Modal 樣式 */
+.milestone-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+    padding: 2rem;
+    overflow-y: auto;
+}
+
+.milestone-modal-content {
+    background: white;
+    border-radius: 16px;
+    max-width: 600px;
+    width: 100%;
+    max-height: 90vh;
+    overflow-y: auto;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+    border-left: 4px solid #10b981;
+}
+
+.milestone-modal-header {
+    padding: 1.5rem;
+    border-bottom: 1px solid #e2e8f0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+.status-badges {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.status-badge {
+    padding: 0.5rem 1rem;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: white;
+}
+
+.badge-not-started {
+    background: #64748b;
+}
+
+.badge-in-progress {
+    background: #f59e0b;
+}
+
+.badge-rejected {
+    background: #f97316;
+}
+
+.badge-completed {
+    background: #10b981;
+}
+
+.badge-review {
+    background: #3b82f6;
+}
+
+.priority-badge {
+    padding: 0.5rem 1rem;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: white;
+}
+
+.badge-priority-normal {
+    background: #94a3b8;
+}
+
+.badge-priority-important {
+    background: #fbbf24;
+}
+
+.badge-priority-urgent {
+    background: #fb923c;
+}
+
+.badge-priority-super-urgent {
+    background: #ef4444;
+}
+
+.modal-actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.btn-edit {
+    padding: 0.5rem 1rem;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    background: white;
+    color: #1e293b;
+    font-size: 0.85rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.btn-edit:hover {
+    background: #f8fafc;
+    border-color: #94a3b8;
+}
+
+.btn-delete {
+    padding: 0.5rem 1rem;
+    border: 1px solid #ef4444;
+    border-radius: 6px;
+    background: white;
+    color: #ef4444;
+    font-size: 0.85rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.btn-delete:hover {
+    background: #fee2e2;
+}
+
+.milestone-modal-body {
+    padding: 1.5rem;
+}
+
+.team-info-section {
+    margin-bottom: 1rem;
+}
+
+.team-name {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #1e293b;
+}
+
+.requirement-section {
+    margin-bottom: 1rem;
+    color: #64748b;
+    font-size: 0.9rem;
+}
+
+.text-muted {
+    color: #94a3b8;
+    font-style: italic;
+}
+
+.milestone-title {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #1e293b;
+    margin: 0 0 1rem 0;
+}
+
+.milestone-desc-section {
+    margin-bottom: 1.5rem;
+    padding: 0.75rem;
+    background: rgba(102, 126, 234, 0.05);
+    border-radius: 6px;
+    border-left: 2px solid #667eea;
+}
+
+.milestone-desc-section p {
+    margin: 0;
+    color: #64748b;
+    line-height: 1.5;
+}
+
+.date-section {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+}
+
+.date-item {
+    flex: 1;
+    min-width: 200px;
+}
+
+.date-label {
+    font-weight: 600;
+    color: #475569;
+    margin-right: 0.5rem;
+}
+
+.date-value {
+    color: #1e293b;
+}
+
+.completion-section,
+.approval-section {
+    margin-bottom: 1rem;
+    padding: 1rem;
+    background: #f8fafc;
+    border-radius: 8px;
+}
+
+.info-item {
+    margin-bottom: 0.5rem;
+}
+
+.info-item:last-child {
+    margin-bottom: 0;
+}
+
+.info-label {
+    font-weight: 600;
+    color: #475569;
+    margin-right: 0.5rem;
+}
+
+.info-value {
+    color: #1e293b;
+}
+
+.milestone-modal-footer {
+    padding: 1rem 1.5rem;
+    border-top: 1px solid #e2e8f0;
+    display: flex;
+    justify-content: flex-end;
+}
+
+.btn-close {
+    padding: 0.5rem 1.5rem;
+    background: #64748b;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.btn-close:hover {
+    background: #475569;
+}
+
 @media (max-width: 768px) {
-    .gantt-container {
+    .milestone-modal {
         padding: 1rem;
     }
     
-    .gantt-header {
-        padding: 1rem 1.5rem;
+    .milestone-modal-content {
+        max-height: 95vh;
     }
     
-    .gantt-task-name {
-        width: 200px;
-        min-width: 200px;
+    .date-section {
+        flex-direction: column;
+    }
+    
+    .date-item {
+        min-width: 100%;
     }
 }
-

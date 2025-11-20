@@ -386,6 +386,19 @@ switch ($do) {
         if ($ms_title === '') json_err('請輸入里程碑標題');
         if ($ms_start_d === '' || $ms_end_d === '') json_err('請選擇開始和截止時間');
         
+        // 驗證時間：截止時間不可小於開始時間
+        // 修改日期：2025-01-XX
+        // 改動內容：添加時間驗證
+        // 相關功能：新增里程碑時間驗證
+        // 方式：比較開始時間和截止時間
+        if ($ms_start_d && $ms_end_d) {
+            $startTime = strtotime($ms_start_d);
+            $endTime = strtotime($ms_end_d);
+            if ($endTime < $startTime) {
+                json_err('截止時間不可小於開始時間');
+            }
+        }
+        
         // 驗證優先級範圍
         if ($ms_priority < 0 || $ms_priority > 3) {
             $ms_priority = 0;
@@ -406,6 +419,102 @@ switch ($do) {
             $stmt->execute([$req_ID_value, $team_ID, $ms_title, $ms_desc, $ms_start_d, $ms_end_d, $ms_priority]);
             
             $ms_ID = (int)$conn->lastInsertId();
+            
+            // 獲取團隊資訊
+            $stmt = $conn->prepare("SELECT team_project_name FROM teamdata WHERE team_ID = ?");
+            $stmt->execute([$team_ID]);
+            $team = $stmt->fetch(PDO::FETCH_ASSOC);
+            $teamName = $team['team_project_name'] ?? "團隊 {$team_ID}";
+            
+            // 獲取團隊的所有成員（學生，不包括指導老師）
+            // 修改日期：2025-01-XX
+            // 改動內容：新增里程碑時，通知團隊的所有學生
+            // 相關功能：新增里程碑通知
+            // 方式：查詢團隊成員並排除指導老師（role_ID=4），使用 msgdata 和 msgtargetdata 創建通知
+            $teamMembers = [];
+            try {
+                // 先嘗試使用 team_u_ID，排除指導老師
+                $stmt = $conn->prepare("
+                    SELECT DISTINCT tm.team_u_ID
+                    FROM teammember tm
+                    LEFT JOIN userrolesdata ur ON ur.ur_u_ID = tm.team_u_ID AND ur.role_ID = 4 AND ur.user_role_status = 1
+                    WHERE tm.team_ID = ? AND ur.ur_u_ID IS NULL
+                ");
+                $stmt->execute([$team_ID]);
+                $teamMembers = $stmt->fetchAll(PDO::FETCH_COLUMN);
+                
+                // 如果沒有找到，嘗試使用 u_ID
+                if (empty($teamMembers)) {
+                    $stmt = $conn->prepare("
+                        SELECT DISTINCT tm.u_ID
+                        FROM teammember tm
+                        LEFT JOIN userrolesdata ur ON ur.ur_u_ID = tm.u_ID AND ur.role_ID = 4 AND ur.user_role_status = 1
+                        WHERE tm.team_ID = ? AND ur.ur_u_ID IS NULL
+                    ");
+                    $stmt->execute([$team_ID]);
+                    $teamMembers = $stmt->fetchAll(PDO::FETCH_COLUMN);
+                }
+            } catch (Exception $e) {
+                // 如果失敗，嘗試使用舊的欄位名稱，排除指導老師
+                try {
+                    $stmt = $conn->prepare("
+                        SELECT DISTINCT tm.u_ID
+                        FROM teammember tm
+                        LEFT JOIN userrolesdata ur ON ur.ur_u_ID = tm.u_ID AND ur.role_ID = 4 AND ur.user_role_status = 1
+                        WHERE tm.team_ID = ? AND ur.ur_u_ID IS NULL
+                    ");
+                    $stmt->execute([$team_ID]);
+                    $teamMembers = $stmt->fetchAll(PDO::FETCH_COLUMN);
+                } catch (Exception $e2) {
+                    // 如果還是失敗，記錄錯誤但不中斷流程
+                    error_log("獲取團隊成員失敗: " . $e2->getMessage());
+                    $teamMembers = [];
+                }
+            }
+            
+            // 為團隊所有成員創建通知
+            if (count($teamMembers) > 0) {
+                try {
+                    // 獲取指導老師姓名
+                    $stmt = $conn->prepare("SELECT u_name FROM userdata WHERE u_ID = ?");
+                    $stmt->execute([$u_ID]);
+                    $teacherName = $stmt->fetchColumn() ?: '指導老師';
+                    
+                    $stmt = $conn->prepare("
+                        INSERT INTO msgdata 
+                        (msg_title, msg_content, msg_type, msg_status, msg_start_d, msg_created_d, msg_a_u_ID)
+                        VALUES (?, ?, 'SYSTEM_NOTICE', 1, NOW(), NOW(), 'system')
+                    ");
+                    $msgTitle = "新里程碑通知";
+                    $msgContent = "{$teacherName} 為團隊「{$teamName}」新增了里程碑「{$ms_title}」，請前往查看。";
+                    $stmt->execute([$msgTitle, $msgContent]);
+                    $msg_ID = $conn->lastInsertId();
+                    
+                    if ($msg_ID > 0) {
+                        // 為每位團隊成員添加通知目標
+                        $stmt = $conn->prepare("
+                            INSERT INTO msgtargetdata (msg_ID, msg_target_type, msg_target_ID)
+                            VALUES (?, 'USER', ?)
+                        ");
+                        foreach ($teamMembers as $member_ID) {
+                            if (!empty($member_ID)) {
+                                try {
+                                    $stmt->execute([$msg_ID, $member_ID]);
+                                } catch (Exception $e) {
+                                    error_log("為成員 {$member_ID} 添加通知目標失敗: " . $e->getMessage());
+                                }
+                            }
+                        }
+                    }
+                } catch (Exception $e) {
+                    // 記錄錯誤但不中斷流程
+                    error_log("創建通知失敗: " . $e->getMessage());
+                }
+            } else {
+                // 如果沒有找到成員，記錄警告
+                error_log("警告：團隊 {$team_ID} 沒有找到成員，無法發送通知");
+            }
+            
             json_ok(['ms_ID' => $ms_ID, 'message' => '里程碑建立成功']);
         } catch (Throwable $e) {
             json_err('建立失敗：'.$e->getMessage());
@@ -434,6 +543,19 @@ switch ($do) {
         // 方式：在 UPDATE 語句中添加 ms_priority 欄位
         if ($team_ID <= 0) json_err('請選擇團隊');
         if ($ms_title === '') json_err('請輸入里程碑標題');
+        
+        // 驗證時間：截止時間不可小於開始時間
+        // 修改日期：2025-01-XX
+        // 改動內容：添加時間驗證
+        // 相關功能：更新里程碑時間驗證
+        // 方式：比較開始時間和截止時間
+        if ($ms_start_d && $ms_end_d) {
+            $startTime = strtotime($ms_start_d);
+            $endTime = strtotime($ms_end_d);
+            if ($endTime < $startTime) {
+                json_err('截止時間不可小於開始時間');
+            }
+        }
         
         // 驗證優先級範圍
         if ($ms_priority < 0 || $ms_priority > 3) {
@@ -884,14 +1006,26 @@ switch ($do) {
                     SELECT 
                         m.ms_ID,
                         m.ms_title,
+                        m.ms_desc,
                         m.ms_start_d,
                         m.ms_end_d,
                         m.ms_status,
                         m.ms_priority,
                         m.ms_created_d,
-                        t.team_project_name as team_name
+                        m.ms_completed_d,
+                        m.ms_approved_d,
+                        m.ms_u_ID,
+                        m.ms_approved_u_ID,
+                        m.req_ID,
+                        t.team_project_name as team_name,
+                        u.u_name as student_name,
+                        r.req_title,
+                        u2.u_name as approver_name
                     FROM milesdata m
                     JOIN teamdata t ON m.team_ID = t.team_ID
+                    LEFT JOIN userdata u ON m.ms_u_ID = u.u_ID
+                    LEFT JOIN requirementdata r ON m.req_ID = r.req_ID
+                    LEFT JOIN userdata u2 ON m.ms_approved_u_ID = u2.u_ID
                     WHERE m.team_ID = ? AND t.team_status = 1
                     ORDER BY COALESCE(m.ms_start_d, m.ms_created_d) ASC, m.ms_created_d ASC
                 ");
@@ -929,14 +1063,26 @@ switch ($do) {
                             SELECT 
                                 m.ms_ID,
                                 m.ms_title,
+                                m.ms_desc,
                                 m.ms_start_d,
                                 m.ms_end_d,
                                 m.ms_status,
                                 m.ms_priority,
                                 m.ms_created_d,
-                                t.team_project_name as team_name
+                                m.ms_completed_d,
+                                m.ms_approved_d,
+                                m.ms_u_ID,
+                                m.ms_approved_u_ID,
+                                m.req_ID,
+                                t.team_project_name as team_name,
+                                u.u_name as student_name,
+                                r.req_title,
+                                u2.u_name as approver_name
                             FROM milesdata m
                             JOIN teamdata t ON m.team_ID = t.team_ID
+                            LEFT JOIN userdata u ON m.ms_u_ID = u.u_ID
+                            LEFT JOIN requirementdata r ON m.req_ID = r.req_ID
+                            LEFT JOIN userdata u2 ON m.ms_approved_u_ID = u2.u_ID
                             WHERE m.team_ID = ? AND t.team_status = 1
                             ORDER BY COALESCE(m.ms_start_d, m.ms_created_d) ASC, m.ms_created_d ASC
                         ");
@@ -972,14 +1118,26 @@ switch ($do) {
                             SELECT 
                                 m.ms_ID,
                                 m.ms_title,
+                                m.ms_desc,
                                 m.ms_start_d,
                                 m.ms_end_d,
                                 m.ms_status,
                                 m.ms_priority,
                                 m.ms_created_d,
-                                t.team_project_name as team_name
+                                m.ms_completed_d,
+                                m.ms_approved_d,
+                                m.ms_u_ID,
+                                m.ms_approved_u_ID,
+                                m.req_ID,
+                                t.team_project_name as team_name,
+                                u.u_name as student_name,
+                                r.req_title,
+                                u2.u_name as approver_name
                             FROM milesdata m
                             JOIN teamdata t ON m.team_ID = t.team_ID
+                            LEFT JOIN userdata u ON m.ms_u_ID = u.u_ID
+                            LEFT JOIN requirementdata r ON m.req_ID = r.req_ID
+                            LEFT JOIN userdata u2 ON m.ms_approved_u_ID = u2.u_ID
                             WHERE m.team_ID IN ($placeholders) AND t.team_status = 1
                             ORDER BY COALESCE(m.ms_start_d, m.ms_created_d) ASC, m.ms_created_d ASC
                         ");

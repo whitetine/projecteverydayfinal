@@ -48,8 +48,10 @@ if (!window._milestoneAppInitialized) {
                         req_ID: 0,
                         status: -1
                     },
+                    selectedMilestone: null,
                     showCreateModal: false,
                     showEditModal: false,
+                    timeError: '',
                     form: {
                         ms_ID: 0,
                         req_ID: 0,
@@ -187,6 +189,24 @@ if (!window._milestoneAppInitialized) {
                     // 可以添加點擊卡片後的詳細視圖邏輯
                     console.log('選擇里程碑:', milestone);
                 },
+                
+                showMilestoneDetail(milestone) {
+                    this.selectedMilestone = milestone;
+                },
+                
+                closeMilestoneDetail() {
+                    this.selectedMilestone = null;
+                },
+                
+                getStatusBarClass(status) {
+                    const s = Number(status);
+                    if (s === 0) return 'bar-not-started';
+                    if (s === 1) return 'bar-in-progress';
+                    if (s === 2) return 'bar-rejected';
+                    if (s === 3) return 'bar-completed';
+                    if (s === 4) return 'bar-review';
+                    return 'bar-not-started';
+                },
 
                 // 編輯里程碑
                 editMilestone(milestone) {
@@ -299,6 +319,13 @@ if (!window._milestoneAppInitialized) {
                 // 儲存里程碑
                 async saveMilestone() {
                     try {
+                        // 驗證時間：截止時間不可小於開始時間
+                        this.validateTimeRange();
+                        if (this.timeError) {
+                            Swal.fire('錯誤', this.timeError, 'error');
+                            return;
+                        }
+
                         const formData = new FormData();
                         Object.keys(this.form).forEach(key => {
                             if (this.form[key] !== null && this.form[key] !== undefined) {
@@ -329,10 +356,24 @@ if (!window._milestoneAppInitialized) {
                     window.location.hash = '#pages/gantt_chart.php';
                 },
                 
+                // 驗證時間範圍
+                validateTimeRange() {
+                    this.timeError = '';
+                    if (this.form.ms_start_d && this.form.ms_end_d) {
+                        const startTime = new Date(this.form.ms_start_d).getTime();
+                        const endTime = new Date(this.form.ms_end_d).getTime();
+                        
+                        if (endTime < startTime) {
+                            this.timeError = '截止時間不可小於開始時間';
+                        }
+                    }
+                },
+                
                 // 關閉 Modal
                 closeModal() {
                     this.showCreateModal = false;
                     this.showEditModal = false;
+                    this.timeError = '';
                     this.form = {
                         ms_ID: 0,
                         req_ID: 0,

@@ -113,7 +113,11 @@ if ($role_ID == 6) {
                                 <div 
                                     class="gantt-bar" 
                                     :class="getBarClass(milestone)"
-                                    :style="getBarPosition(milestone)">
+                                    :style="getBarPosition(milestone)"
+                                    :title="getBarTooltip(milestone)"
+                                    @click="showMilestoneDetail(milestone)"
+                                    @mouseenter="showTooltip($event, milestone)"
+                                    @mouseleave="hideTooltip($event)">
                                     <div class="bar-label">{{ milestone.ms_title }}</div>
                                 </div>
                             </div>
@@ -129,6 +133,81 @@ if ($role_ID == 6) {
             </div>
             <div class="empty-text">目前沒有里程碑資料</div>
             <div class="empty-hint" v-if="role_ID === 4">請先選擇團隊</div>
+        </div>
+
+        <!-- 里程碑詳細資訊 Modal -->
+        <div class="milestone-modal" v-if="selectedMilestone" @click.self="closeMilestoneDetail">
+            <div class="milestone-modal-content">
+                <div class="milestone-modal-header">
+                    <div class="status-badges">
+                        <span class="status-badge" :class="getStatusBadgeClass(selectedMilestone.ms_status)">
+                            {{ getStatusText(selectedMilestone.ms_status) }}
+                        </span>
+                        <span class="priority-badge" :class="getPriorityBadgeClass(selectedMilestone.ms_priority)">
+                            {{ getPriorityText(selectedMilestone.ms_priority) }}
+                        </span>
+                    </div>
+                    <div class="modal-actions">
+                        <button class="btn-edit" @click="editMilestone(selectedMilestone)">編輯</button>
+                        <button class="btn-delete" @click="deleteMilestone(selectedMilestone)">刪除</button>
+                    </div>
+                </div>
+                
+                <div class="milestone-modal-body">
+                    <div class="team-info-section">
+                        <span class="team-name">{{ selectedMilestone.team_name || '未指定團隊' }}</span>
+                    </div>
+                    
+                    <div class="requirement-section">
+                        <span v-if="selectedMilestone.req_title">{{ selectedMilestone.req_title }}</span>
+                        <span v-else class="text-muted">未關聯基本需求</span>
+                    </div>
+                    
+                    <h3 class="milestone-title">{{ selectedMilestone.ms_title }}</h3>
+                    
+                    <div class="milestone-desc-section">
+                        <p v-if="selectedMilestone.ms_desc">{{ selectedMilestone.ms_desc }}</p>
+                        <p v-else class="text-muted">無說明</p>
+                    </div>
+                    
+                    <div class="date-section">
+                        <div class="date-item">
+                            <span class="date-label">開始：</span>
+                            <span class="date-value">{{ formatDate(selectedMilestone.ms_start_d) }}</span>
+                        </div>
+                        <div class="date-item">
+                            <span class="date-label">截止：</span>
+                            <span class="date-value">{{ formatDate(selectedMilestone.ms_end_d) }}</span>
+                        </div>
+                    </div>
+                    
+                    <div class="completion-section" v-if="selectedMilestone.ms_completed_d || selectedMilestone.ms_u_ID">
+                        <div class="info-item">
+                            <span class="info-label">完成時間：</span>
+                            <span class="info-value">{{ formatDateTime(selectedMilestone.ms_completed_d) }}</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">完成者：</span>
+                            <span class="info-value">{{ selectedMilestone.student_name || '未指定' }}</span>
+                        </div>
+                    </div>
+                    
+                    <div class="approval-section" v-if="selectedMilestone.ms_approved_d || selectedMilestone.ms_approved_u_ID">
+                        <div class="info-item">
+                            <span class="info-label">通過時間：</span>
+                            <span class="info-value">{{ formatDateTime(selectedMilestone.ms_approved_d) }}</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">審核人：</span>
+                            <span class="info-value">{{ selectedMilestone.approver_name || '未指定' }}</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="milestone-modal-footer">
+                    <button class="btn-close" @click="closeMilestoneDetail">關閉</button>
+                </div>
+            </div>
         </div>
     </div>
 
