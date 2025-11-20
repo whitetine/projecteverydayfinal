@@ -1,4 +1,5 @@
     <?php include "head.php" ?>
+    <link rel="stylesheet" href="css/role_switch.css?v=<?= time() ?>">
 
     <?php
     session_start();
@@ -9,9 +10,48 @@
       exit;
     }
     
+    // 檢查是否有角色，如果沒有則檢查是否有多個角色
+    $role_ID = $_SESSION['role_ID'] ?? null;
+    if (!$role_ID) {
+        $u_ID = $_SESSION['u_ID'];
+        $stmt = $conn->prepare("
+            SELECT COUNT(*) as role_count
+            FROM userrolesdata ur
+            WHERE ur.ur_u_ID = ? AND ur.user_role_status = 1
+        ");
+        $stmt->execute([$u_ID]);
+        $result = $stmt->fetch(PDO::FETCH_ASSOC);
+        $roleCount = (int)($result['role_count'] ?? 0);
+        
+        if ($roleCount > 1) {
+            // 有多個角色，跳轉到角色選擇頁面
+            echo "<script>location.href='pages/role_select.php';</script>";
+            exit;
+        } elseif ($roleCount === 1) {
+            // 只有一個角色，自動設置
+            $stmt = $conn->prepare("
+                SELECT r.role_ID, r.role_name
+                FROM userrolesdata ur
+                JOIN roledata r ON ur.role_ID = r.role_ID
+                WHERE ur.ur_u_ID = ? AND ur.user_role_status = 1
+                LIMIT 1
+            ");
+            $stmt->execute([$u_ID]);
+            $role = $stmt->fetch(PDO::FETCH_ASSOC);
+            if ($role) {
+                $_SESSION['role_ID'] = $role['role_ID'];
+                $_SESSION['role_name'] = $role['role_name'];
+                $role_ID = $role['role_ID'];
+            }
+        } else {
+            // 沒有角色
+            echo "<script>alert('此帳號尚未設定任何角色');location.href='index.php';</script>";
+            exit;
+        }
+    }
+    
     $user_name = $_SESSION['u_name'] ?? '未登入';
     $role_name = $_SESSION['role_name'] ?? '無';
-    $role_ID = $_SESSION['role_ID'] ?? null;
     $isAdmin = in_array($role_ID, [1, 2]);
     ?>
     <!DOCTYPE html>
@@ -173,6 +213,53 @@
               const listEl = document.getElementById('notificationList');
               if (listEl) {
                   listEl.innerHTML = '<p class="text-danger text-center">載入通知失敗</p>';
+              }
+          }
+      }
+      
+      // 切換角色
+      async function switchRole(role_ID, role_name) {
+          try {
+              const formData = new FormData();
+              formData.append('role_ID', role_ID);
+              formData.append('role_name', role_name);
+
+              const response = await fetch('api.php?do=role_session', {
+                  method: 'POST',
+                  body: formData
+              });
+
+              const data = await response.json();
+              
+              if (data) {
+                  // 成功，重新載入頁面
+                  if (window.Swal) {
+                      Swal.fire({
+                          icon: 'success',
+                          title: '切換成功',
+                          text: `已切換為「${role_name}」身分`,
+                          timer: 1500,
+                          showConfirmButton: false
+                      }).then(() => {
+                          window.location.reload();
+                      });
+                  } else {
+                      alert(`已切換為「${role_name}」身分`);
+                      window.location.reload();
+                  }
+              } else {
+                  if (window.Swal) {
+                      Swal.fire('錯誤', '切換角色失敗，請重試', 'error');
+                  } else {
+                      alert('切換角色失敗，請重試');
+                  }
+              }
+          } catch (error) {
+              console.error('切換角色失敗:', error);
+              if (window.Swal) {
+                  Swal.fire('錯誤', '切換角色時發生錯誤', 'error');
+              } else {
+                  alert('切換角色時發生錯誤');
               }
           }
       }

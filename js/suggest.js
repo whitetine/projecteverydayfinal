@@ -51,19 +51,30 @@ function initSuggest() {
     groupSelect.parentNode.replaceChild(newGroupSelect, groupSelect);
     const freshGroupSelect = document.getElementById("sg-group");
     
+    // 載入類型列表
+    loadTypes();
+    
     // 當屆別改變 → 載入類組，然後載入團隊
     freshCohortSelect.addEventListener("change", () => {
         const cohortId = freshCohortSelect.value;
         const exportBtn = document.getElementById("sg-export-btn");
+        const typeSelect = document.getElementById("sg-type");
+        const titleInput = document.getElementById("sg-title");
         
         if (cohortId) {
             loadGroups(cohortId);
         } else {
             freshGroupSelect.innerHTML = '<option value="">請先選擇屆別</option>';
             freshGroupSelect.disabled = true;
+            if (typeSelect) {
+                typeSelect.innerHTML = '<option value="">請先選擇屆別和類組</option>';
+                typeSelect.disabled = true;
+            }
+            if (titleInput) titleInput.disabled = true;
             document.getElementById("sg-team-list").innerHTML = "";
             if (exportBtn) exportBtn.disabled = true;
         }
+        updateTitle();
     });
     
     // 當類組改變 → 載入團隊
@@ -71,15 +82,33 @@ function initSuggest() {
         const cohortId = freshCohortSelect.value;
         const groupId = freshGroupSelect.value;
         const exportBtn = document.getElementById("sg-export-btn");
+        const typeSelect = document.getElementById("sg-type");
+        const titleInput = document.getElementById("sg-title");
         
         if (cohortId && groupId) {
+            if (typeSelect) {
+                typeSelect.disabled = false;
+            }
+            if (titleInput) titleInput.disabled = false;
             loadTeams(cohortId, groupId);
             if (exportBtn) exportBtn.disabled = false;
         } else {
+            if (typeSelect) {
+                typeSelect.innerHTML = '<option value="">請先選擇屆別和類組</option>';
+                typeSelect.disabled = true;
+            }
+            if (titleInput) titleInput.disabled = true;
             document.getElementById("sg-team-list").innerHTML = "";
             if (exportBtn) exportBtn.disabled = true;
         }
+        updateTitle();
     });
+    
+    // 當類型改變 → 更新標題
+    const typeSelect = document.getElementById("sg-type");
+    if (typeSelect) {
+        typeSelect.addEventListener("change", updateTitle);
+    }
     
     // 匯出按鈕事件
     const exportBtn = document.getElementById("sg-export-btn");
@@ -251,7 +280,78 @@ async function loadCohorts() {
 }
 
 /* ==========================================
-   2-1. 取得類組 (groupdata) - 依屆別
+   2-1. 取得類型列表 (typedata)
+========================================== */
+async function loadTypes() {
+    const typeSelect = document.getElementById("sg-type");
+    if (!typeSelect) return;
+    
+    try {
+        const apiUrl = resolveSuggestApiUrl();
+        const r = await fetch(`${apiUrl}?action=listTypes`, {
+            credentials: 'same-origin'
+        });
+        
+        if (!r.ok) {
+            throw new Error(`HTTP ${r.status}: ${r.statusText}`);
+        }
+        
+        const j = await r.json();
+        
+        if (!j.success) {
+            throw new Error(j.msg || '未知錯誤');
+        }
+        
+        typeSelect.innerHTML = '<option value="">請選擇類型</option>';
+        
+        if (j.data && Array.isArray(j.data) && j.data.length > 0) {
+            j.data.forEach(t => {
+                typeSelect.innerHTML += `
+                    <option value="${t.type_ID}">
+                        ${t.type_value}
+                    </option>`;
+            });
+        }
+        
+    } catch (err) {
+        console.error('載入類型失敗:', err);
+        const typeSelect = document.getElementById("sg-type");
+        if (typeSelect) {
+            typeSelect.innerHTML = '<option value="">載入失敗</option>';
+        }
+    }
+}
+
+/* ==========================================
+   2-2. 自動生成標題
+========================================== */
+function updateTitle() {
+    const cohortSelect = document.getElementById("sg-cohort");
+    const groupSelect = document.getElementById("sg-group");
+    const typeSelect = document.getElementById("sg-type");
+    const titleInput = document.getElementById("sg-title");
+    
+    if (!cohortSelect || !groupSelect || !typeSelect || !titleInput) return;
+    
+    const cohortId = cohortSelect.value;
+    const groupId = groupSelect.value;
+    const typeId = typeSelect.value;
+    
+    if (!cohortId || !groupId || !typeId) {
+        return;
+    }
+    
+    const cohortName = cohortSelect.options[cohortSelect.selectedIndex]?.text || '';
+    const groupName = groupSelect.options[groupSelect.selectedIndex]?.text || '';
+    const typeName = typeSelect.options[typeSelect.selectedIndex]?.text || '';
+    
+    if (cohortName && groupName && typeName) {
+        titleInput.value = `${cohortName}${groupName}${typeName}建議`;
+    }
+}
+
+/* ==========================================
+   2-3. 取得類組 (groupdata) - 依屆別
 ========================================== */
 async function loadGroups(cohortId) {
     const groupSelect = document.getElementById("sg-group");
@@ -411,11 +511,17 @@ function bindAutoNumberEvent() {
 ========================================== */
 async function saveSuggest(teamId, suggestId = null) {
     const area = document.getElementById(`sg-textarea-${teamId}`);
+    const titleInput = document.getElementById("sg-title");
+    const typeSelect = document.getElementById("sg-type");
+    
     let text = area.value.trim();
     if (!text) {
         Toast.fire({ icon: "warning", title: "請輸入建議內容" });
         return;
     }
+    
+    const suggestName = titleInput ? titleInput.value.trim() : "";
+    const typeId = typeSelect ? typeSelect.value : "";
 
     try {
         const formData = new FormData();
@@ -429,6 +535,10 @@ async function saveSuggest(teamId, suggestId = null) {
         }
         formData.append("team_ID", teamId);
         formData.append("content", text);
+        formData.append("suggest_name", suggestName);
+        if (typeId) {
+            formData.append("type_ID", typeId);
+        }
 
         const apiUrl = resolveSuggestApiUrl();
         const r = await fetch(apiUrl, { method: "POST", body: formData });

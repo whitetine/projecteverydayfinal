@@ -82,9 +82,34 @@ switch ($do) {
 
     // 設定角色到 session（相容舊前端：ID/name；也接受 role_ID/role_name）
     case 'role_session':
-        $_SESSION["role_ID"]   = $p["role_ID"]   ?? $p["ID"]   ?? null;
-        $_SESSION["role_name"] = $p["role_name"] ?? $p["name"] ?? null;
-        echo json_encode($_SESSION["role_ID"]);
+        $role_ID = $p["role_ID"] ?? $p["ID"] ?? null;
+        $role_name = $p["role_name"] ?? $p["name"] ?? null;
+        
+        if (!$role_ID) {
+            json_err('缺少角色ID');
+        }
+        
+        // 驗證該角色是否屬於當前用戶
+        $u_ID = $_SESSION['u_ID'] ?? null;
+        if (!$u_ID) {
+            json_err('請先登入', 'NOT_LOGGED_IN', 401);
+        }
+        
+        $stmt = $conn->prepare("
+            SELECT COUNT(*) 
+            FROM userrolesdata ur
+            WHERE ur.ur_u_ID = ? AND ur.role_ID = ? AND ur.user_role_status = 1
+        ");
+        $stmt->execute([$u_ID, $role_ID]);
+        
+        if (!$stmt->fetchColumn()) {
+            json_err('您沒有此角色權限');
+        }
+        
+        $_SESSION["role_ID"] = $role_ID;
+        $_SESSION["role_name"] = $role_name;
+        
+        json_ok(['role_ID' => $role_ID, 'role_name' => $role_name, 'message' => '角色設定成功']);
         break;
 
     // 更新個人資料（原樣 redirect）

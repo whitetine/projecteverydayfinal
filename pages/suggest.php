@@ -1,10 +1,7 @@
 
 <?php
 session_start();
-if (!isset($_SESSION['u_ID'])) {
-    echo "<script>alert('請先登入');location.href='../index.php';</script>";
-    exit;
-}
+
 ?>
 <!-- === 建議系統 === -->
 <div class="suggest-wrapper">
@@ -22,14 +19,24 @@ if (!isset($_SESSION['u_ID'])) {
         </div>
         <div class="suggest-group-box">
             <label>選擇類組</label>
-            <div class="suggest-group-controls">
-                <select id="sg-group" class="form-select" disabled>
-                    <option value="">請先選擇屆別</option>
-                </select>
-                <button id="sg-export-btn" class="sg-btn-export" disabled>
-                    <span>匯出</span>
-                </button>
-            </div>
+            <select id="sg-group" class="form-select" disabled>
+                <option value="">請先選擇屆別</option>
+            </select>
+        </div>
+        <div class="suggest-type-box">
+            <label>選擇類型</label>
+            <select id="sg-type" class="form-select" disabled>
+                <option value="">請先選擇屆別和類組</option>
+            </select>
+        </div>
+        <div class="suggest-title-box">
+            <label>標題</label>
+            <input type="text" id="sg-title" class="form-control" placeholder="標題將自動生成" disabled>
+        </div>
+        <div class="suggest-export-box">
+            <button id="sg-export-btn" class="sg-btn-export" disabled>
+                <span>匯出</span>
+            </button>
         </div>
     </div>
 

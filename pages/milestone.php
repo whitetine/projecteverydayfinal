@@ -115,7 +115,19 @@ if (!$stmt->fetchColumn()) {
              class="milestone-bar"
              :class="getStatusBarClass(milestone.ms_status)"
              @click="showMilestoneDetail(milestone)">
-            <div class="bar-label">{{ milestone.ms_title }}</div>
+            <div class="bar-content">
+                <div class="bar-header">
+                    <div class="bar-team" v-if="milestone.team_name">
+                        {{ milestone.team_name }}
+                    </div>
+                    <div class="bar-priority-right">
+                        <span class="priority-badge" :class="getPriorityClass(milestone.ms_priority || 0)">
+                            {{ getPriorityText(milestone.ms_priority || 0) }}
+                        </span>
+                    </div>
+                </div>
+                <div class="bar-label">{{ milestone.ms_title }}</div>
+            </div>
         </div>
     </div>
 
