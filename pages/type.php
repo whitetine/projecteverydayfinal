@@ -87,6 +87,17 @@
         });
     }
 
+    // 🔹🔹🔹 新增：每次載入這個頁面，先把舊的 typeVueApp 清掉 🔹🔹🔹
+    if (window.typeVueApp && typeof window.typeVueApp.unmount === 'function') {
+        try {
+            window.typeVueApp.unmount();
+        } catch (e) {
+            console.warn('卸載 type app 時出錯:', e);
+        }
+    }
+    // 把全域變數清成 null，好讓下面的 if (!window.typeVueApp) 一定會再跑一次
+    window.typeVueApp = null;
+
     if (!window.typeVueApp) {
         window.typeVueApp = Vue.createApp({
             data() {

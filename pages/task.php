@@ -660,6 +660,18 @@
             customClass: { popup: 'my-toast' } // 套用上面 CSS 樣式
         });
     }
+
+    // 🔹 先把舊的 taskVueApp 卸載掉，避免第二次載入頁面時抓不到 Vue
+    if (window.taskVueApp && typeof window.taskVueApp.unmount === 'function') {
+        try {
+            window.taskVueApp.unmount();
+        } catch (e) {
+            console.warn('卸載 task app 時出錯:', e);
+        }
+    }
+    
+    window.taskVueApp = null;
+
     if (!window.taskVueApp) {
         window.taskVueApp = Vue.createApp({
             data() {
@@ -810,17 +822,18 @@
                         .done(() => {
                             $('#task_look_modal').modal('hide')
                             this.get_task()
-                            if (status == 1) {
+                            // 🔹 這裡原本是 =（指派），會有 bug，幫你改成 === 比較
+                            if (status === 1) {
                                 toast({ type: 'success', title: '接下任務囉！' })
-                            } else if (status = 0) {
+                            } else if (status === 0) {
                                 toast({ type: 'success', title: '已放棄該任務' })
-                            } else if (status = 3) {
+                            } else if (status === 3) {
                                 toast({ type: 'success', title: '恭喜完成任務！' })
                             }
                         })
                 },
                 req_return_click() {
-                    
+
                     // this.req_return = true
                     // this.return_form.count1 = this.now_requirement.req_count[0]
                     // this.return_form.count3 = this.now_requirement.req_count[2]
@@ -829,7 +842,7 @@
                     if (!this.return_form.rp_remark || (this.return_form.count1 && !this.return_form.count2)) {
                         toast({ type: 'error', title: '請完整填寫回報！' })
                     } else {
-                        $.post("../modules/task.php?do=req_return_submit", { form: this.return_form, now_team_ID: this.now_team_ID,req_ID:this.now_requirement.req_ID })
+                        $.post("../modules/task.php?do=req_return_submit", { form: this.return_form, now_team_ID: this.now_team_ID, req_ID: this.now_requirement.req_ID })
                             .done(() => {
                                 $('#req_look_modal').modal('hide')
                                 toast({ type: 'success', title: '送出成功，等待審核！' })
