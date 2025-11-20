@@ -18,6 +18,16 @@
     gap: 1rem;
 }
 
+.gantt-title {
+    flex-shrink: 0;
+}
+
+.gantt-controls {
+    flex: 1;
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 1rem;
 }
 
 .btn-back {
