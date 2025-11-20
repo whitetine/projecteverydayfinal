@@ -20,6 +20,12 @@ if (!isset($_SESSION['u_ID'])) {
     <a class="nav-link ajax-link" href="pages/admin_usermanage.php">
       <i class="fa-solid fa-users-gear"></i><span>帳號管理</span>
     </a>
+    <a class="nav-link ajax-link" href="pages/team_manage.php">
+      <i class="fa-solid fa-people-group"></i><span>團隊管理</span>
+    </a>
+    <a class="nav-link ajax-link" href="pages/team_apply_review.php">
+      <i class="fa-solid fa-clipboard-check"></i><span>專題申請審核</span>
+    </a>
     <a class="nav-link ajax-link" href="pages/group_manage.php">
       <i class="fa-solid fa-layer-group"></i><span>類組管理</span>
     </a>
@@ -62,6 +68,9 @@ if (!isset($_SESSION['u_ID'])) {
     <a class="nav-link ajax-link" href="pages/type.php">
       <i class="fa-solid fa-star"></i><span>分類管理</span></a>
   <?php elseif ($role_ID == 6): ?>
+    <a class="nav-link ajax-link" href="pages/team_apply.php">
+      <i class="fa-solid fa-file-signature"></i><span>專題申請</span>
+    </a>
     <a class="nav-link ajax-link" href="pages/apply.php">
       <i class="fa-solid fa-file-arrow-up"></i><span>文件管理</span>
     </a>
@@ -101,6 +110,9 @@ if (!isset($_SESSION['u_ID'])) {
     <!-- 科辦專屬頁面 -->
     <a class="nav-link ajax-link" href="pages/office.php">
       <i class="fa-solid fa-building"></i><span>科辦管理</span></a>
+    <a class="nav-link ajax-link" href="pages/team_apply_review.php">
+      <i class="fa-solid fa-clipboard-check"></i><span>專題申請審核</span>
+    </a>
     <a class="nav-link ajax-link" href="pages/file.php">
       <i class="fa-solid fa-folder-open"></i><span>文件管理</span></a>
     <a class="nav-link ajax-link" href="pages/apply.php">

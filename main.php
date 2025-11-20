@@ -53,6 +53,52 @@
     $user_name = $_SESSION['u_name'] ?? '未登入';
     $role_name = $_SESSION['role_name'] ?? '無';
     $isAdmin = in_array($role_ID, [1, 2]);
+    
+    // 檢查學生是否有團隊，如果沒有則導向到專題申請頁面
+    if ($role_ID == 6) {
+        $u_ID = $_SESSION['u_ID'];
+        
+        // 檢查 teammember 表結構（兼容兩種版本）
+        $teamUserField = 'team_u_ID';
+        try {
+            $stmt = $conn->prepare("SHOW COLUMNS FROM teammember LIKE 'team_u_ID'");
+            $stmt->execute();
+            if (!$stmt->fetch()) {
+                $teamUserField = 'u_ID';
+            }
+        } catch (Exception $e) {
+            $teamUserField = 'u_ID';
+        }
+        
+        // 檢查是否有團隊
+        try {
+            $stmt = $conn->prepare("
+                SELECT COUNT(*) 
+                FROM teammember tm
+                INNER JOIN teamdata t ON tm.team_ID = t.team_ID
+                WHERE tm.{$teamUserField} = ? AND t.team_status = 1
+            ");
+            $stmt->execute([$u_ID]);
+            $hasTeam = $stmt->fetchColumn() > 0;
+        } catch (Exception $e) {
+            $hasTeam = false;
+        }
+        
+        // 如果沒有團隊，強制導向到專題申請頁面
+        if (!$hasTeam) {
+            // 檢查當前是否已經在專題申請頁面
+            $currentPage = $_SERVER['PHP_SELF'] ?? '';
+            $currentUri = $_SERVER['REQUEST_URI'] ?? '';
+            
+            // 如果不在專題申請頁面，則導向
+            if (strpos($currentPage, 'team_apply.php') === false && 
+                strpos($currentUri, 'team_apply.php') === false &&
+                strpos($currentUri, '#pages/team_apply.php') === false) {
+                echo "<script>location.href='pages/team_apply.php';</script>";
+                exit;
+            }
+        }
+    }
     ?>
     <!DOCTYPE html>
     <html lang="zh-Hant">

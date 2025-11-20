@@ -2,6 +2,15 @@
 (function() {
   'use strict';
   
+  // SweetAlert Toast（右下角通知）
+  const Toast = Swal.mixin({
+    toast: true,
+    position: "bottom-end",
+    showConfirmButton: false,
+    timer: 3000,
+    timerProgressBar: true
+  });
+  
   // 等待 DOM 加载完成
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);
@@ -29,11 +38,11 @@
       if (file) {
         // 验证文件大小（5MB）
         if (file.size > 5 * 1024 * 1024) {
-          if (window.Swal) {
-            Swal.fire('檔案過大', '頭貼大小不能超過 5MB', 'warning');
-          } else {
-            alert('頭貼大小不能超過 5MB');
-          }
+          Toast.fire({
+            icon: 'warning',
+            title: '檔案過大',
+            text: '頭貼大小不能超過 5MB'
+          });
           e.target.value = '';
           return;
         }
@@ -41,11 +50,11 @@
         // 验证文件类型
         const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
         if (!validTypes.includes(file.type)) {
-          if (window.Swal) {
-            Swal.fire('格式錯誤', '只接受 JPG、PNG 或 WebP 格式', 'warning');
-          } else {
-            alert('只接受 JPG、PNG 或 WebP 格式');
-          }
+          Toast.fire({
+            icon: 'warning',
+            title: '格式錯誤',
+            text: '只接受 JPG、PNG 或 WebP 格式'
+          });
           e.target.value = '';
           return;
         }
@@ -132,33 +141,33 @@
       // 基本驗證
       const nameInput = editForm.querySelector('[name="name"]');
       if (!nameInput || !nameInput.value.trim()) {
-        if (window.Swal) {
-          Swal.fire('驗證失敗', '請輸入姓名', 'warning');
-        } else {
-          alert('請輸入姓名');
-        }
+        Toast.fire({
+          icon: 'warning',
+          title: '驗證失敗',
+          text: '請輸入姓名'
+        });
         nameInput?.focus();
         return;
       }
       
       const roleSelect = editForm.querySelector('[name="role_id"]');
       if (!roleSelect || !roleSelect.value) {
-        if (window.Swal) {
-          Swal.fire('驗證失敗', '請選擇角色', 'warning');
-        } else {
-          alert('請選擇角色');
-        }
+        Toast.fire({
+          icon: 'warning',
+          title: '驗證失敗',
+          text: '請選擇角色'
+        });
         roleSelect?.focus();
         return;
       }
       
       const statusSelect = editForm.querySelector('[name="status_id"]');
       if (!statusSelect || !statusSelect.value) {
-        if (window.Swal) {
-          Swal.fire('驗證失敗', '請選擇狀態', 'warning');
-        } else {
-          alert('請選擇狀態');
-        }
+        Toast.fire({
+          icon: 'warning',
+          title: '驗證失敗',
+          text: '請選擇狀態'
+        });
         statusSelect?.focus();
         return;
       }
@@ -169,68 +178,51 @@
         btnSave.disabled = true;
         btnSave.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-2"></i>儲存中...';
         
-        if (window.Swal) {
-          Swal.fire({
-            title: '儲存中...',
-            text: '請稍候',
-            allowOutsideClick: false,
-            didOpen: () => {
-              Swal.showLoading();
-            }
-          });
-        }
-        
-        // 使用相对于项目根目录的路径
-        // 由于页面是通过 AJAX 加载到 main.php 的 #content 中，所以路径应该相对于 main.php
-        const res = await fetch('pages/admin_updateuser.php', { 
+        // 動態判斷 API 路徑
+        const apiPath = location.pathname.includes('/pages/') ? 'admin_updateuser.php' : 'pages/admin_updateuser.php';
+        const res = await fetch(apiPath, { 
           method: 'POST', 
           body: fd 
         });
         
-        if (!res.ok) {
+        // 檢查回應是否為 JSON
+        const contentType = res.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+          const text = await res.text();
+          console.error('非 JSON 回應:', text);
           throw new Error(`HTTP ${res.status}: ${res.statusText}`);
         }
         
         const json = await res.json();
         
         if (json.ok) {
-          if (window.Swal) {
-            await Swal.fire({
-              title: '更新成功',
-              text: json.msg || '資料已成功更新',
-              icon: 'success',
-              confirmButtonColor: '#28a745',
-              timer: 2000,
-              timerProgressBar: true
-            });
-          } else {
-            alert('更新成功：' + (json.msg || '資料已更新'));
-          }
+          Toast.fire({
+            icon: 'success',
+            title: '更新成功',
+            text: json.msg || '資料已成功更新'
+          });
           
-          // 返回列表頁
-          location.hash = '#pages/admin_usermanage.php';
-          if (typeof loadSubpage === 'function') {
-            loadSubpage('pages/admin_usermanage.php');
-          } else {
-            $('#content').load('pages/admin_usermanage.php', function() {
-              if (typeof initPageScript === 'function') initPageScript();
-            });
-          }
+          // 延遲一下再返回列表頁，讓用戶看到成功訊息
+          setTimeout(() => {
+            location.hash = '#pages/admin_usermanage.php';
+            if (typeof loadSubpage === 'function') {
+              loadSubpage('pages/admin_usermanage.php');
+            } else {
+              $('#content').load('pages/admin_usermanage.php', function() {
+                if (typeof initPageScript === 'function') initPageScript();
+              });
+            }
+          }, 500);
         } else {
           throw new Error(json.msg || '更新失敗');
         }
       } catch (err) {
         console.error('Update error:', err);
-        if (window.Swal) {
-          Swal.fire({
-            title: '更新失敗',
-            text: err.message || '請稍後再試',
-            icon: 'error',
-            confirmButtonColor: '#dc3545'
-          });
-        } else {
-          alert('更新失敗：' + (err.message || '請稍後再試'));
-        }
+        Toast.fire({
+          icon: 'error',
+          title: '更新失敗',
+          text: err.message || '請稍後再試'
+        });
       } finally {
         btnSave.disabled = false;
         btnSave.innerHTML = '<i class="fa-solid fa-check me-2"></i>完成修改';

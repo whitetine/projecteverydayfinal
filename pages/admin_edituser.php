@@ -50,7 +50,7 @@ $cohorts  = $conn->query("SELECT * FROM cohortdata ORDER BY cohort_ID DESC")->fe
         <div class="col-12 col-md-4">
           <div class="avatar-section">
             <img id="avatarPreview"
-              src="<?= !empty($user['u_img']) ? 'headshot/' . htmlspecialchars($user['u_img']) : 'https://cdn-icons-png.flaticon.com/512/1144/1144760.png' ?>"
+              src="<?= !empty($user['u_img']) ? 'headshot/' . htmlspecialchars(trim($user['u_img'])) : 'https://cdn-icons-png.flaticon.com/512/1144/1144760.png' ?>"
               alt="用戶頭像" 
               class="avatar-preview"
               onerror="this.src='https://cdn-icons-png.flaticon.com/512/1144/1144760.png'"

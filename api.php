@@ -50,6 +50,17 @@ case in_array($do, ['get_milestones', 'get_requirements', 'get_teams', 'get_requ
     require __DIR__ . '/modules/milestone.php';
     break;
 
+    // 團隊管理
+    case in_array($do, ['get_team_management_data', 'get_team_detail', 'get_filter_options']):
+        require __DIR__ . '/modules/team.php';
+        break;
+
+    // 專題申請
+    case in_array($do, [                        'get_teachers', 'get_student_info', 'submit_application',
+                        'get_pending_applications', 'review_application', 'get_my_application']):
+        require __DIR__ . '/modules/team_apply.php';
+        break;
+
     default:
         // 統一以 JSON 提示未知 action（避免前端誤判「不是 JSON」）
         json_err('Unknown action: ' . $do);

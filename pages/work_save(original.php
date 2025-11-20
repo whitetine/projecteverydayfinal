@@ -13,7 +13,12 @@ function go($url){
   exit;
 }
 function dlog($m){
-  @file_put_contents(__DIR__.'/work_debug_'.date('Ymd').'.log', date('c')." | $m\n", FILE_APPEND);
+  $logDir = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'logs';
+  if (!is_dir($logDir)) {
+    @mkdir($logDir, 0775, true);
+  }
+  $logFile = $logDir . DIRECTORY_SEPARATOR . 'work_debug_' . date('Ymd') . '.log';
+  @file_put_contents($logFile, date('c') . " | $m\n", FILE_APPEND);
 }
 //POST過大偵測（避免看似「沒反應」
 if (isset($_SERVER['CONTENT_LENGTH']) && (int)$_SERVER['CONTENT_LENGTH']>0 && empty($_POST) && empty($_FILES)) {
