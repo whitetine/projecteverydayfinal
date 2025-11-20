@@ -31,6 +31,8 @@ window.initWorkDraft = function () {
   const tbody = document.querySelector('#work-table-body');
   const pager = document.querySelector('#pager-bar');
   const filterForm = document.getElementById('filter-form');
+  const isTeacher = filterForm?.dataset.isTeacher === '1';
+  const teamSelect = isTeacher ? filterForm?.querySelector('select[name="team"]') : null;
   const whoSelect = filterForm?.querySelector('select[name="who"]');
   const fromInput = filterForm?.querySelector('input[name="from"]');
   const toInput = filterForm?.querySelector('input[name="to"]');
@@ -39,6 +41,7 @@ window.initWorkDraft = function () {
   let currentPage = 1;
   let totalPages = 1;
   let currentWorkId = null;
+  let teacherTeamsCache = [];
 
   // HTML escape helper
   function escapeHtml(str) {
@@ -171,6 +174,7 @@ window.initWorkDraft = function () {
   }
 
   function updateWhoOptions(meId, teamMembers, currentWho) {
+    if (isTeacher) return;
     if (!whoSelect) return;
     // 每次依回傳資料重建，保持簡單
     const options = [];
@@ -202,10 +206,68 @@ window.initWorkDraft = function () {
     }).join('');
   }
 
+  function populateTeacherStudentSelect(teamId, selectedStudent = 'team') {
+    if (!isTeacher || !whoSelect) return;
+    if (!teamId) {
+      whoSelect.innerHTML = '<option value="">請先選擇團隊</option>';
+      whoSelect.disabled = true;
+      return;
+    }
+    const team = teacherTeamsCache.find(t => String(t.team_ID) === String(teamId));
+    if (!team) {
+      whoSelect.innerHTML = '<option value="">找不到學生</option>';
+      whoSelect.disabled = true;
+      return;
+    }
+    const students = team.students || [];
+    let html = `<option value="team">全部學生</option>`;
+    students.forEach(stu => {
+      html += `<option value="${escapeHtml(stu.id)}">${escapeHtml(stu.name || stu.id)}</option>`;
+    });
+    whoSelect.innerHTML = html;
+    whoSelect.disabled = false;
+    const validValues = students.map(stu => String(stu.id)).concat(['team']);
+    if (validValues.includes(String(selectedStudent))) {
+      whoSelect.value = selectedStudent;
+    } else {
+      whoSelect.value = 'team';
+    }
+  }
+
+  function updateTeacherOptions(teams = [], selectedTeam = '', selectedStudent = 'team') {
+    if (!isTeacher || !teamSelect) return;
+    teacherTeamsCache = Array.isArray(teams) ? teams : [];
+    if (!teacherTeamsCache.length) {
+      teamSelect.innerHTML = '<option value="">尚未指導任何團隊</option>';
+      teamSelect.disabled = true;
+      populateTeacherStudentSelect('', '');
+      return;
+    }
+    teamSelect.disabled = false;
+    let html = '';
+    teacherTeamsCache.forEach(t => {
+      const label = `${escapeHtml(t.team_name || `Team ${t.team_ID}`)} (ID:${escapeHtml(String(t.team_ID))})`;
+      html += `<option value="${escapeHtml(String(t.team_ID))}">${label}</option>`;
+    });
+    teamSelect.innerHTML = html;
+    if (selectedTeam && teacherTeamsCache.some(t => String(t.team_ID) === String(selectedTeam))) {
+      teamSelect.value = selectedTeam;
+    } else {
+      selectedTeam = teamSelect.value || (teacherTeamsCache[0] && teacherTeamsCache[0].team_ID);
+      teamSelect.value = selectedTeam;
+    }
+    populateTeacherStudentSelect(selectedTeam, selectedStudent);
+  }
+
   async function loadList(page = 1) {
     try {
       const params = new URLSearchParams({ action: 'list', page });
-      if (whoSelect?.value) params.set('who', whoSelect.value);
+      if (isTeacher) {
+        if (teamSelect?.value) params.set('team', teamSelect.value);
+        if (whoSelect?.value) params.set('who', whoSelect.value);
+      } else if (whoSelect?.value) {
+        params.set('who', whoSelect.value);
+      }
       if (fromInput?.value) params.set('from', fromInput.value);
       if (toInput?.value) params.set('to', toInput.value);
 
@@ -235,7 +297,11 @@ window.initWorkDraft = function () {
       }
 
       // 更新 who 選項
-      if (whoSelect && j.me && j.teamMembers) {
+      if (isTeacher) {
+        const selectedTeam = j.teacherSelectedTeam || '';
+        const selectedStudent = (j.filter && j.filter.who) || 'team';
+        updateTeacherOptions(j.teacherTeams || [], selectedTeam, selectedStudent);
+      } else if (whoSelect && j.me && j.teamMembers) {
         const currentWho = (j.filter && j.filter.who) || 'me';
         updateWhoOptions(j.me, j.teamMembers, currentWho);
       }
@@ -257,6 +323,12 @@ window.initWorkDraft = function () {
       tbody.innerHTML = `<tr><td colspan="${colspan}" class="text-danger text-center">資料載入失敗</td></tr>`;
       pager.innerHTML = '<span class="disabled">1</span>';
     }
+  }
+
+  if (isTeacher && teamSelect) {
+    teamSelect.addEventListener('change', () => {
+      populateTeacherStudentSelect(teamSelect.value, 'team');
+    });
   }
 
   // 篩選表單送出

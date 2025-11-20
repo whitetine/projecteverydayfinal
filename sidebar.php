@@ -74,7 +74,8 @@ $isAdmin = in_array($role_ID, [1, 2]);
       <i class="fa-solid fa-list-check"></i><span>互評(detail)</span></a>
           <a class="nav-link ajax-link" href="pages/milestone.php">
       <i class="fa-solid fa-flag-checkered"></i><span>里程碑管理</span></a>
-      
+      <a class="nav-link ajax-link" href="pages/work_draft.php">
+      <i class="fa-solid fa-file-pen"></i><span>查看工作日誌</span></a>
 
       <?php elseif ($role_ID == 3): ?>
       <a class="nav-link ajax-link" href="pages/checkreviewperiods.php">

@@ -1,6 +1,9 @@
 <?php
 session_start();//註解
 
+$role_ID = $_SESSION['role_ID'] ?? null;
+$isTeacher = ((int)$role_ID === 4);
+
 
 // 檢查是否為 AJAX 請求（jQuery load 會設定此 header）或 partial 參數
 $isAjax = isset($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest';
@@ -18,18 +21,37 @@ if (!$isPartial && !$isAjax && !$isFromMain) {
 
 <div class="d-flex justify-content-between align-items-center mb-3">
   <h4 class="mb-0">我的日誌紀錄</h4>
-  <a href="pages/work_form.php" class="btn btn-outline-secondary ajax-link">回日誌填寫</a>
+  <?php if (!$isTeacher): ?>
+    <a href="pages/work_form.php" class="btn btn-outline-secondary ajax-link">回日誌填寫</a>
+  <?php endif; ?>
 </div>
 
 <!-- 篩選區 -->
-<form id="filter-form" class="card mb-3" method="get">
+<form id="filter-form" class="card mb-3" method="get"
+      data-role="<?= htmlspecialchars($role_ID ?? '', ENT_QUOTES, 'UTF-8'); ?>"
+      data-is-teacher="<?= $isTeacher ? '1' : '0'; ?>">
   <div class="card-body filter-row d-flex flex-wrap align-items-end gap-3">
-    <div>
-      <label class="form-label mb-1">查看對象</label>
-      <select name="who" class="form-select">
-        <!-- 選項由 JS 依後端資料動態載入 -->
-      </select>
-    </div>
+    <?php if ($isTeacher): ?>
+      <div>
+        <label class="form-label mb-1">查看對象</label>
+        <select name="team" class="form-select" data-teacher-team>
+          <option value="">載入中...</option>
+        </select>
+      </div>
+      <div>
+        <label class="form-label mb-1">學生</label>
+        <select name="who" class="form-select" data-teacher-student disabled>
+          <option value="">請先選擇團隊</option>
+        </select>
+      </div>
+    <?php else: ?>
+      <div>
+        <label class="form-label mb-1">查看對象</label>
+        <select name="who" class="form-select">
+          <!-- 選項由 JS 依後端資料動態載入 -->
+        </select>
+      </div>
+    <?php endif; ?>
     <div>
       <label class="form-label mb-1">起始日期</label>
       <input type="date" name="from" class="form-control">

@@ -75,6 +75,9 @@ if (!$usePerioddata) {
 $whereClause = '';
 $queryParams = [];
 
+// 預設匹配的建立者
+$matchedUserId = $uid;
+
 // 如果使用 perioddata 表且有 pe_created_u_ID 欄位，根據使用者過濾（只顯示自己新增的時段）
 if ($usePerioddata && $hasCreatedUserId && $uid) {
   // 確保 u_ID 是字串格式，因為 pe_created_u_ID 可能是字串
@@ -88,7 +91,6 @@ if ($usePerioddata && $hasCreatedUserId && $uid) {
     error_log("調試 - 當前使用者ID: '$uid' (類型: " . gettype($uid) . ")");
     
     // 檢查是否有完全匹配
-    $matchedUserId = $uid;
     if (in_array($uid, $allUsers, true)) {
       error_log("調試 - 找到完全匹配的使用者ID");
     } else {
@@ -488,7 +490,13 @@ $response = [
     'periods'    => $periods,
     'active'     => $active,
     'period_ID'  => $selectedPeriodId,
-    'rows'       => $rows
+    'rows'       => $rows,
+    'meta'       => [
+        'current_user' => $uid,
+        'matched_period_creator' => $matchedUserId,
+        'period_count' => count($periods),
+        'team_count'   => count($teams)
+    ]
 ];
 
 // 調試：記錄返回的資料

@@ -12,6 +12,8 @@ if (!isset($_SESSION['u_ID'])) {
 date_default_timezone_set('Asia/Taipei');
 
 $u_id  = $_SESSION['u_ID'];
+$role_ID = $_SESSION['role_ID'] ?? null;
+$isTeacher = ((int)$role_ID === 4);
 $TABLE = 'workdata';
 
 header('Content-Type: application/json; charset=utf-8');
@@ -47,11 +49,24 @@ function uid_name_map(PDO $conn, array $uids): array {
     return $map;
 }
 
+function columnExists(PDO $conn, string $table, string $column): bool {
+    try {
+        $stmt = $conn->prepare("SHOW COLUMNS FROM `$table` LIKE ?");
+        $stmt->execute([$column]);
+        return $stmt->rowCount() > 0;
+    } catch (Throwable $e) {
+        return false;
+    }
+}
+
+$teamUserField = columnExists($conn, 'teammember', 'team_u_ID') ? 'team_u_ID' : 'u_ID';
+$userRoleUidField = columnExists($conn, 'userrolesdata', 'ur_u_ID') ? 'ur_u_ID' : 'u_ID';
+
 // 安全取得 action
 $action = $_REQUEST['action'] ?? 'list';
 
 // ===== 取得同隊成員 =====
-function getTeamInfo(PDO $conn, string $u_id): array {
+function getTeamInfo(PDO $conn, string $u_id, string $teamUserField, string $userRoleUidField): array {
     $teamMemberIDs = [];
     $userNameMap   = [];
     $my_team_id    = null;
@@ -60,7 +75,7 @@ function getTeamInfo(PDO $conn, string $u_id): array {
         $st = $conn->prepare("
             SELECT team_ID 
             FROM teammember 
-            WHERE team_u_ID=? 
+            WHERE {$teamUserField}=? 
             ORDER BY tm_updated_d DESC 
             LIMIT 1
         ");
@@ -78,13 +93,13 @@ function getTeamInfo(PDO $conn, string $u_id): array {
         try {
             $st = $conn->prepare("
                 SELECT 
-                    tm.team_u_ID, 
-                    COALESCE(ud.u_name, tm.team_u_ID) AS u_name
+                    tm.{$teamUserField} AS member_id, 
+                    COALESCE(ud.u_name, tm.{$teamUserField}) AS u_name
                 FROM teammember tm
                 LEFT JOIN userdata ud 
-                    ON ud.u_ID = tm.team_u_ID
+                    ON ud.u_ID = tm.{$teamUserField}
                 JOIN userrolesdata ur 
-                    ON ur.ur_u_ID = tm.team_u_ID 
+                    ON ur.{$userRoleUidField} = tm.{$teamUserField} 
                    AND ur.role_ID = 6 
                    AND ur.user_role_status = 1
                 WHERE tm.team_ID = ? 
@@ -93,8 +108,8 @@ function getTeamInfo(PDO $conn, string $u_id): array {
             ");
             $st->execute([$my_team_id]);
             foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
-                $teamMemberIDs[] = $r['team_u_ID'];
-                $userNameMap[$r['team_u_ID']] = $r['u_name'];
+                $teamMemberIDs[] = $r['member_id'];
+                $userNameMap[$r['member_id']] = $r['u_name'];
             }
         } catch (Throwable $e) {
             // 若關聯表缺失，視為沒有團隊成員
@@ -107,6 +122,65 @@ function getTeamInfo(PDO $conn, string $u_id): array {
         'team_ids' => $teamMemberIDs,
         'name_map' => $userNameMap
     ];
+}
+
+function getTeamStudents(PDO $conn, int $teamId, string $teamUserField, string $userRoleUidField): array {
+    try {
+        $stmt = $conn->prepare("
+            SELECT tm.{$teamUserField} AS student_id,
+                   COALESCE(ud.u_name, tm.{$teamUserField}) AS student_name
+            FROM teammember tm
+            JOIN userrolesdata ur
+                  ON ur.{$userRoleUidField} = tm.{$teamUserField}
+                 AND ur.role_ID = 6
+                 AND ur.user_role_status = 1
+            LEFT JOIN userdata ud
+                   ON ud.u_ID = tm.{$teamUserField}
+            WHERE tm.team_ID = ?
+              AND (tm.tm_status = 1 OR tm.tm_status IS NULL)
+            ORDER BY student_name
+        ");
+        $stmt->execute([$teamId]);
+        $out = [];
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $out[] = [
+                'id'   => $row['student_id'],
+                'name' => $row['student_name'],
+            ];
+        }
+        return $out;
+    } catch (Throwable $e) {
+        return [];
+    }
+}
+
+function getTeacherTeams(PDO $conn, string $u_id, string $teamUserField, string $userRoleUidField): array {
+    try {
+        $stmt = $conn->prepare("
+            SELECT DISTINCT tm.team_ID,
+                   COALESCE(td.team_project_name, CONCAT('Team ', tm.team_ID)) AS team_name
+            FROM teammember tm
+            JOIN userrolesdata ur
+                  ON ur.{$userRoleUidField} = tm.{$teamUserField}
+                 AND ur.role_ID = 4
+                 AND ur.user_role_status = 1
+            LEFT JOIN teamdata td ON td.team_ID = tm.team_ID
+            WHERE tm.{$teamUserField} = ?
+            ORDER BY tm.team_ID
+        ");
+        $stmt->execute([$u_id]);
+        $teams = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    } catch (Throwable $e) {
+        return [];
+    }
+
+    foreach ($teams as &$team) {
+        $teamId = (int)$team['team_ID'];
+        $team['students'] = getTeamStudents($conn, $teamId, $teamUserField, $userRoleUidField);
+    }
+    unset($team);
+
+    return $teams;
 }
 
 // ====== Action: get_comments =====
@@ -178,19 +252,57 @@ if ($action === 'add_comment') {
 
 // ====== Action: list（預設） =====
 if ($action === 'list') {
+    $teacherTeams = [];
+    $selectedTeamId = null;
+    $filterTeamValue = null;
     try {
         // 取得同隊資訊
-        $teamInfo      = getTeamInfo($conn, $u_id);
+        $teamInfo      = getTeamInfo($conn, $u_id, $teamUserField, $userRoleUidField);
         $teamMemberIDs = $teamInfo['team_ids'];
         $userNameMap   = $teamInfo['name_map'];
 
+        $teacherTeams = $isTeacher ? getTeacherTeams($conn, $u_id, $teamUserField, $userRoleUidField) : [];
+        $selectedTeamId = null;
+        if ($isTeacher) {
+            if (!empty($teacherTeams)) {
+                $validTeamIds = array_map(fn($t) => (string)$t['team_ID'], $teacherTeams);
+                $selectedTeamId = $_GET['team'] ?? (string)$teacherTeams[0]['team_ID'];
+                if (!in_array((string)$selectedTeamId, $validTeamIds, true)) {
+                    $selectedTeamId = (string)$teacherTeams[0]['team_ID'];
+                }
+                $teamMemberIDs = [];
+                $userNameMap = [];
+                foreach ($teacherTeams as $team) {
+                    if ((string)$team['team_ID'] === (string)$selectedTeamId) {
+                        foreach ($team['students'] as $stu) {
+                            $teamMemberIDs[] = $stu['id'];
+                            $userNameMap[$stu['id']] = $stu['name'];
+                        }
+                        break;
+                    }
+                }
+            } else {
+                $selectedTeamId = null;
+                $teamMemberIDs = [];
+                $userNameMap = [];
+            }
+        }
+        $filterTeamValue = $isTeacher ? $selectedTeamId : null;
+
     // 篩選參數
-    $who  = $_GET['who']  ?? 'me';
+    $whoDefault = $isTeacher ? 'team' : 'me';
+    $who  = $_GET['who']  ?? $whoDefault;
     $from = toDate($_GET['from'] ?? null, date('Y-m-01'));
     $to   = toDate($_GET['to']   ?? null, date('Y-m-d'));
 
     if (strtotime($from) > strtotime($to)) {
         [$from, $to] = [$to, $from];
+    }
+
+    if ($isTeacher && $who !== 'team') {
+        if (empty($teamMemberIDs) || !in_array($who, $teamMemberIDs, true)) {
+            $who = 'team';
+        }
     }
 
     $per    = 10;
@@ -379,9 +491,13 @@ if ($action === 'list') {
                 'who'  => $who,
                 'from' => $from,
                 'to'   => $to,
+                'team' => $filterTeamValue,
             ],
             'teamMembers' => $teamMembersOut,
             'me'          => $u_id,
+            'isTeacher'   => $isTeacher,
+            'teacherTeams' => $teacherTeams,
+            'teacherSelectedTeam' => $selectedTeamId,
         ], JSON_UNESCAPED_UNICODE);
         exit;
     } catch (Throwable $e) {
