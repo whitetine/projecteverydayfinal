@@ -8,7 +8,6 @@
         </h1>
         **期限快到時發mail提醒
         **分頁
-        **篩選
         **查看相關連結里程碑、任務
     </div>
     <!-- 專題需求牆內容顯示小卡 -->
@@ -17,9 +16,8 @@
             <div class="req-board-header">
                 <h2 class="req-board-title">
                     目前基本需求({{ now_group.name }})
-
                 </h2>
-                <span class="req-board-sub">共 {{ all_requirement.length }} 筆</span>
+                <span class="req-board-sub">共 {{ filtered_requirement.length }} 筆</span>
             </div>
             <div class="req-filter-row">
                 <span>狀態：</span>
@@ -40,7 +38,8 @@
             </div>
             <div class="req-card-list">
                 <!-- 單張需求卡片 -->
-                <div class="req-card" v-for="(item,key) in all_requirement" @click="now_requirement_click(key)">
+                <div class="req-card" v-for="item in filtered_requirement" :key="item.req_ID"
+                    @click="now_requirement_click(item)">
                     <div class="req-color-bar" :style="{backgroundColor: item.color_hex}"></div>
                     <div class="req-card-body">
                         <div class="req-card-title-row">
@@ -81,8 +80,9 @@
                     任務公佈欄({{ now_group.team_project_name }})
                 </h2>
                 <button class="btn btn-primary" @click="task_modal_show">新增任務</button>
-                <span class="req-board-sub">共 {{ all_task.length }} 筆</span>
+                <span class="req-board-sub">共 {{ filtered_task.length }} 筆</span>
             </div>
+
 
             <div class="req-filter-all">
                 <div class="req-filter-row">
@@ -112,7 +112,7 @@
 
             <div class="req-card-list">
                 <!-- 單張需求卡片 -->
-                <div class="req-card" v-for="(item,key) in all_task" @click="now_task_click(key)">
+                <div class="req-card" v-for="item in filtered_task" :key="item.task_ID" @click="now_task_click(item)">
                     <div class="req-color-bar"
                         :style="'background:'+(item.task_priority==1?'#FFE98A':item.task_priority==2?'#FFCC8A':item.task_priority==3?'#FF955C':'#FF2E2E')">
                     </div>
@@ -130,8 +130,9 @@
                             <p class="req-direction">
                                 {{item.done_name}}
                             </p>
-                            <span class="req-count-tag" v-if="item.task_status==1"
+                            <span class="req-count-tag" v-if="item.task_status==1 && item.task_done_d"
                                 style="background:#F8BF63">{{item.task_done_d+'已接下該任務'}}</span>
+                            <span class="req-count-tag" v-if="item.task_status==1 && !item.task_done_d" style="background:#F8BF63">{{'已被分配任務'}}</span>
                             <span class="req-count-tag" v-if="item.task_status==3"
                                 style="background:#CAFCBB">{{item.task_done_d+'已完成該任務'}}</span>
                         </div>
@@ -140,7 +141,6 @@
                             <span class="req-count-label" style="margin-right: 14px;">{{item.creator_name}}</span>
                             <span class="req-count-label">創立時間：</span>
                             <span class="req-count-label">{{ item.task_created_d }}</span>
-
                         </div>
                         <div class="req-date-row">
                             <span class="req-date" v-if="item.task_start_d">
@@ -154,6 +154,7 @@
                 </div>
                 <!-- / 單張需求卡片 -->
             </div>
+
         </div>
     </div>
     <teleport to="body">
@@ -332,7 +333,8 @@
                         <button class="btn btn-secondary" style="margin-right: 14px;">**查看相關連結里程碑、任務</button>
                         <button class="btn btn-warning" @click="task_modal_show('req',now_requirement.req_ID)"
                             style="margin-right: 14px;">建立任務</button>
-                        <button class="btn btn-primary" @click="req_return_click" v-if="now_requirement.status==0">回報該需求</button>
+                        <button class="btn btn-primary" @click="req_return_click"
+                            v-if="now_requirement.status==0">回報該需求</button>
                     </div>
                     <!-- <div class="modal-footer" v-else>
                         <button class="btn btn-secondary" @click="this.req_return=false"
@@ -367,8 +369,9 @@
                                     <p class="req-direction">
                                         {{now_task.done_name}}
                                     </p>
-                                    <span class="req-count-tag" v-if="now_task.task_status==1"
+                                    <span class="req-count-tag" v-if="now_task.task_status==1 && now_task.task_done_d"
                                         style="background:#F8BF63">{{now_task.task_done_d+'已接下該任務'}}</span>
+                                    <span class="req-count-tag" v-else style="background:#F8BF63">{{'已被分配任務'}}</span>
                                     <span class="req-count-tag" v-if="now_task.task_status==3"
                                         style="background:#CAFCBB">{{now_task.task_done_d+'已完成該任務'}}</span>
                                 </div>
@@ -475,6 +478,52 @@
                     req_return: false,
                 }
             },
+            computed: {
+                filtered_requirement() {
+                    const statusFilter = this.filter.requirement_status;
+
+                    return this.all_requirement.filter(item => {
+                        switch (statusFilter) {
+                            case 'notyet':   // 未回報
+                                return item.status === 0;
+                            case 'taken':    // 審核中
+                                return item.status === 1;
+                            case 'return':   // 被退件
+                                return item.status === 2;
+                            case 'done':     // 已通過
+                                return item.status === 3;
+                            default:         // '' = ALL
+                                return true;
+                        }
+                    });
+                },
+                filtered_task() {
+                    const mineFilter = this.filter.task_filter;              // '' or 'mine'
+                    const statusFilter = this.filter.task_filter_status;     // '', 'notyet', 'taken', 'done'
+                    const u_ID = this.u_ID;
+
+                    return this.all_task.filter(item => {
+                        // 1️⃣ 先處理「篩選：我的」
+                        if (mineFilter === 'mine') {
+                            const isCreator = item.task_u_ID === u_ID;          // 我建立的任務
+                            const isTaker = item.task_done_u_ID === u_ID;     // 我接下的任務
+                            if (!isCreator && !isTaker) return false;
+                        }
+
+                        // 2️⃣ 再處理狀態篩選
+                        switch (statusFilter) {
+                            case 'notyet':   // 未屬名
+                                return item.task_status === 0;
+                            case 'taken':    // 被接下
+                                return item.task_status === 1;
+                            case 'done':     // 已完成
+                                return item.task_status === 3;
+                            default:         // '' = ALL
+                                return true;
+                        }
+                    });
+                },
+            },
             methods: {
                 get_requirement() {
                     $.post("../modules/task.php?do=get_now_group", item => {
@@ -506,13 +555,13 @@
                     })
                 },
                 // 以上=>GET，搜尋各種資料，於畫面載入時執行
-                now_requirement_click(key) {
-                    this.now_requirement = this.all_requirement[key]
-                    $('#req_look_modal').modal('show')
+                now_requirement_click(item) {
+                    this.now_requirement = item;
+                    $('#req_look_modal').modal('show');
                 },
-                now_task_click(key) {
-                    this.now_task = this.all_task[key]
-                    $('#task_look_modal').modal('show')
+                now_task_click(item) {
+                    this.now_task = item;
+                    $('#task_look_modal').modal('show');
                 },
                 task_modal_show(type, id) {
                     if (type == "req") {
@@ -577,6 +626,17 @@
                                     toast({ type: 'success', title: '編輯成功' })
                                 })
                         }
+                        this.form = {
+                            id: null,
+                            select1: null,
+                            select2: null,
+                            title: null,
+                            desc: null,
+                            start_d: null,
+                            end_d: null,
+                            priority: 1,
+                            who_task: null
+                        }
                     }
                 },
                 take_task(status) {
@@ -599,6 +659,7 @@
                         .done(() => {
                             toast({ type: 'success', title: '已回報，待指導老師審核' })
                             $('#req_look_modal').modal('hide')
+                            this.get_requirement()
                         })
                     // this.req_return = true
                     // this.return_form.count1 = this.now_requirement.req_count[0]
@@ -618,7 +679,8 @@
             },
             mounted() {
                 this.get_requirement();
-            }
+            },
+
         }).mount("#task_app");
     }
 </script>

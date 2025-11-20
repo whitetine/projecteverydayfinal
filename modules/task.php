@@ -41,8 +41,13 @@ switch ($_GET["do"]) {
         $desc = toNull($p["form"]["desc"]);
         $start_d = toNull($p["form"]["start_d"]);
         $end_d = toNull($p["form"]["end_d"]);
-        $select1 = toNull($p["form"]["select1"]);
-        $select2 = toNull($p["form"]["select2"]);
+        if($p["form"]["select1"]=="miles"){
+            $ms_ID=$p["form"]["select2"];
+            $req_ID='NULL';
+        }else if($p["form"]["select1"]=="req"){
+            $req_ID=$p["form"]["select2"];
+            $ms_ID='NULL';
+        }
         $selectTask = toNull($p["form"]["who_task"]);   // task_done_u_ID
         $team = toNull($p["now_team_ID"]);
         $status = ($p["form"]["who_task"] ? '1' : '0');
@@ -50,14 +55,14 @@ switch ($_GET["do"]) {
         $sql = "INSERT INTO taskdata 
         (task_ID, task_team_ID, task_u_ID, task_cohort_ID, ms_ID, req_ID,
          task_title, task_desc, task_start_d, task_end_d, task_done_u_ID, 
-         task_done_d, task_status, task_priority, task_created_u_ID, task_created_d)
+         task_done_d, task_status, task_priority, task_created_d)
         VALUES(
             NULL,
             $team,
             '{$_SESSION["u_ID"]}',
             '$cohort_ID',
-            $select1,
-            $select2,
+            $ms_ID,
+            $req_ID,
             $title,
             $desc,
             $start_d,
@@ -66,7 +71,6 @@ switch ($_GET["do"]) {
             NULL,
             $status,
             {$p["form"]["priority"]},
-            '{$_SESSION["u_ID"]}',
             CURRENT_TIMESTAMP())";
         query($sql);
         break;
