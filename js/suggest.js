@@ -289,8 +289,8 @@ async function saveSuggest(teamId, suggestId = null) {
 
         Toast.fire({ icon: "success", title: suggestId ? "已更新建議" : "已新增建議" });
 
-        // 儲存後設為唯讀，顯示編輯和刪除按鈕
-        setReadonlyMode(teamId, j.suggest_ID || suggestId);
+        // 儲存後重新載入過濾後的內容，然後設為唯讀
+        await loadTeamSuggest(teamId);
 
     } catch (err) {
         console.log(err);
