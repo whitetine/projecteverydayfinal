@@ -166,6 +166,7 @@ function getTeacherTeams(PDO $conn, string $u_id, string $teamUserField, string 
                  AND ur.user_role_status = 1
             LEFT JOIN teamdata td ON td.team_ID = tm.team_ID
             WHERE tm.{$teamUserField} = ?
+              AND td.team_status = 1
             ORDER BY tm.team_ID
         ");
         $stmt->execute([$u_id]);

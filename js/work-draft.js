@@ -246,7 +246,7 @@ window.initWorkDraft = function () {
     teamSelect.disabled = false;
     let html = '';
     teacherTeamsCache.forEach(t => {
-      const label = `${escapeHtml(t.team_name || `Team ${t.team_ID}`)} (ID:${escapeHtml(String(t.team_ID))})`;
+      const label = escapeHtml(t.team_name || `Team ${t.team_ID}`);
       html += `<option value="${escapeHtml(String(t.team_ID))}">${label}</option>`;
     });
     teamSelect.innerHTML = html;
