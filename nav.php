@@ -10,6 +10,22 @@ $user_img = $_SESSION['u_img'] ?? null;
 $role_ID = $_SESSION['role_ID'] ?? null;
 $role_name = $_SESSION['role_name'] ?? null;
 $isAdmin = in_array($role_ID, [1, 2]);
+
+// 獲取用戶的所有角色（用於角色切換）
+$all_roles = [];
+if (isset($_SESSION['u_ID'])) {
+    require __DIR__ . '/includes/pdo.php';
+    $stmt = $conn->prepare("
+        SELECT r.role_ID, r.role_name
+        FROM userrolesdata ur
+        JOIN roledata r ON ur.role_ID = r.role_ID
+        WHERE ur.ur_u_ID = ? AND ur.user_role_status = 1
+        ORDER BY r.role_ID
+    ");
+    $stmt->execute([$_SESSION['u_ID']]);
+    $all_roles = $stmt->fetchAll(PDO::FETCH_ASSOC);
+}
+$hasMultipleRoles = count($all_roles) > 1;
 ?>
 <nav class="navbar navbar-expand-lg fixed-top <?= $isAdmin ? 'navbar-dark admin-navbar' : 'navbar-light bg-light' ?>">
     <div class="container-fluid d-flex align-items-center justify-content-between">
@@ -65,6 +81,35 @@ $isAdmin = in_array($role_ID, [1, 2]);
                     <li class="px-3 pb-2 small text-muted">
                         <?= htmlspecialchars($_SESSION['u_gmail'] ?? ($_SESSION['u_ID'] ?? '')) ?>
                     </li>
+                    
+                    <?php if ($hasMultipleRoles): ?>
+                    <!-- 角色切換 -->
+                    <li class="px-2 pb-2">
+                        <div class="small text-muted mb-2 px-2">切換身分</div>
+                        <div class="role-switch-list px-2">
+                            <?php foreach ($all_roles as $role): ?>
+                                <button class="role-switch-btn <?= $role['role_ID'] == $role_ID ? 'active' : '' ?>" 
+                                        onclick="switchRole(<?= $role['role_ID'] ?>, '<?= htmlspecialchars($role['role_name'], ENT_QUOTES) ?>')"
+                                        data-role-id="<?= $role['role_ID'] ?>"
+                                        data-role-name="<?= htmlspecialchars($role['role_name'], ENT_QUOTES) ?>">
+                                    <i class="fa-solid <?= 
+                                        $role['role_ID'] == 1 ? 'fa-user-tie' : 
+                                        ($role['role_ID'] == 2 ? 'fa-building' : 
+                                        ($role['role_ID'] == 3 ? 'fa-chalkboard-user' :
+                                        ($role['role_ID'] == 4 ? 'fa-chalkboard-teacher' : 
+                                        ($role['role_ID'] == 5 ? 'fa-user' :
+                                        ($role['role_ID'] == 6 ? 'fa-user-graduate' : 'fa-user'))))) 
+                                    ?>"></i>
+                                    <span><?= htmlspecialchars($role['role_name']) ?></span>
+                                    <?php if ($role['role_ID'] == $role_ID): ?>
+                                        <i class="fa-solid fa-check"></i>
+                                    <?php endif; ?>
+                                </button>
+                            <?php endforeach; ?>
+                        </div>
+                    </li>
+                    <li><hr class="dropdown-divider"></li>
+                    <?php endif; ?>
                     
                     <li>
                         <a class="dropdown-item ajax-link" href="#pages/user_profile.php">

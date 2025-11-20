@@ -249,19 +249,54 @@
 .milestone-bar {
     background: white;
     border-radius: 8px;
-    padding: 1rem 1.25rem;
+    padding: 0.75rem 1.25rem;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
     border-left: 4px solid;
     transition: all 0.3s ease;
     cursor: pointer;
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     min-height: 60px;
 }
 
 .milestone-bar:hover {
     transform: translateY(-2px);
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.bar-content {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    width: 100%;
+}
+
+.bar-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+}
+
+.bar-team {
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: #64748b;
+    flex: 1;
+}
+
+.bar-priority-right {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+}
+
+.bar-priority-right .priority-badge {
+    padding: 0.25rem 0.6rem;
+    border-radius: 12px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    white-space: nowrap;
 }
 
 .bar-label {
@@ -1079,12 +1114,19 @@ body.sb-sidenav-toggled .milestone-detail-modal {
     background: #f8fafc;
     border-radius: 8px;
     gap: 1.25rem;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex-wrap: wrap;
 }
 
 .milestone-detail-body .time-item {
-    padding: 0.75rem 0;
+    padding: 0.75rem 1rem;
     font-size: 1rem;
     line-height: 1.6;
+    text-align: center;
+    flex: 1;
+    min-width: 200px;
 }
 
 .milestone-detail-body .completion-info,

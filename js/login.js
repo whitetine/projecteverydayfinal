@@ -24,13 +24,13 @@ const tpl = `
           <div class="input-group">
             <!-- <label for="acc">帳號</label> -->
             <input id="acc" v-model.trim="login.acc" type="text" inputmode="text"
-                   autocomplete="username" placeholder="請輸入帳號" @keyup.enter="focusPassword" />
+                   autocomplete="off" placeholder="請輸入帳號" @keyup.enter="focusPassword" />
           </div>
 
           <div class="input-group" v-if="hasAccount">
             <!-- <label for="pas">密碼</label> -->
             <input :type="showPassword ? 'text':'password'"
-                   id="pas" v-model.trim="login.pas" autocomplete="current-password"
+                   id="pas" v-model.trim="login.pas" autocomplete="off"
                    placeholder="請輸入密碼" @keyup.enter="loginSubmit" />
             <i v-if="login.pas"
                class="fa-solid toggle-eye"
@@ -83,8 +83,36 @@ createApp({
     onMounted(()=>{
       const el = document.getElementById('forgotModal');
       if (window.bootstrap && el) modalForgot = new bootstrap.Modal(el);
-      // 進頁面時把焦點放在帳號
-      queueMicrotask(()=> document.getElementById('acc')?.focus());
+      
+      // 每次進入頁面時清空帳號和密碼
+      login.acc = '';
+      login.pas = '';
+      showPassword.value = false;
+      error.value = '';
+      
+      // 進頁面時把焦點放在帳號，並確保清空
+      queueMicrotask(()=> {
+        const accInput = document.getElementById('acc');
+        const pasInput = document.getElementById('pas');
+        
+        if (accInput) {
+          accInput.value = ''; // 確保 DOM 元素也被清空
+          accInput.focus();
+        }
+        if (pasInput) {
+          pasInput.value = ''; // 確保密碼欄位也被清空
+        }
+      });
+      
+      // 延遲清空，防止瀏覽器自動填充覆蓋
+      setTimeout(() => {
+        login.acc = '';
+        login.pas = '';
+        const accInput = document.getElementById('acc');
+        const pasInput = document.getElementById('pas');
+        if (accInput) accInput.value = '';
+        if (pasInput) pasInput.value = '';
+      }, 100);
     });
 
     const focusAccount = ()=> document.getElementById('acc')?.focus();
@@ -140,7 +168,13 @@ const loginSubmit = async ()=>{
       return setError(data.msg || '登入失敗');
     }
 
-    // 成功
+    // 如果有多個角色，跳轉到角色選擇頁面
+    if (data.code === 'MULTI_ROLE') {
+      location.href = 'pages/role_select.php';
+      return;
+    }
+
+    // 登入成功，直接跳轉到主頁面
     location.href = 'main.php#pages/new.php';
   }catch(e){
     setError('伺服器錯誤，請稍後再試');

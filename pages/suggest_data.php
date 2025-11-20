@@ -6,9 +6,10 @@ header("Content-Type: application/json; charset=utf-8");
 date_default_timezone_set("Asia/Taipei");
 
 /* ==========================================
-   權限：僅科辦 (role_ID = 2)
+   權限：主任 (role_ID = 1) 和 科辦 (role_ID = 2)
 ========================================== */
-if (!isset($_SESSION["role_ID"]) || $_SESSION["role_ID"] != 2) {
+$role_ID = $_SESSION["role_ID"] ?? null;
+if (!isset($role_ID) || !in_array($role_ID, [1, 2])) {
     echo json_encode(["success" => false, "msg" => "無權限"]);
     exit;
 }
@@ -98,6 +99,22 @@ if ($action === "listGroups") {
     $stmt->execute([$cohort_ID]);
 
     $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    respond(["success" => true, "data" => $rows]);
+}
+
+/* ==========================================
+   action: listTypes
+   取得啟用中的類型列表
+========================================== */
+if ($action === "listTypes") {
+
+    $sql = "SELECT type_ID, type_value
+            FROM typedata
+            WHERE type_status = 1
+            ORDER BY type_ID";
+
+    $rows = $conn->query($sql)->fetchAll(PDO::FETCH_ASSOC);
 
     respond(["success" => true, "data" => $rows]);
 }
@@ -203,6 +220,8 @@ if ($action === "listSuggests") {
 
     $sql = "SELECT 
                 suggest_ID,
+                suggest_name,
+                type_ID,
                 suggest_comment,
                 suggest_d
             FROM suggest
@@ -226,9 +245,21 @@ if ($action === "addSuggest") {
 
     $team_ID = $_POST["team_ID"] ?? 0;
     $content = $_POST["content"] ?? "";
+    $suggest_name = $_POST["suggest_name"] ?? "";
+    $type_ID = $_POST["type_ID"] ?? null;
 
     if (!$team_ID || trim($content) === "") {
         respond(["success" => false, "msg" => "參數錯誤"]);
+    }
+    
+    // 驗證 type_ID（如果提供）
+    if ($type_ID !== null && $type_ID !== "") {
+        $type_ID = (int)$type_ID;
+        if ($type_ID <= 0) {
+            $type_ID = null;
+        }
+    } else {
+        $type_ID = null;
     }
 
     // 處理多行內容：忽略只有編號的行，然後重新編號
@@ -319,10 +350,10 @@ if ($action === "addSuggest") {
     $finalContent = rtrim($finalContent, "\n\r");
 
     $sql = "INSERT INTO suggest
-            (suggest_u_ID, team_ID, suggest_comment, suggest_d, suggest_status)
-            VALUES (?, ?, ?, NOW(), 1)";
+            (suggest_u_ID, team_ID, suggest_name, type_ID, suggest_comment, suggest_d, suggest_status)
+            VALUES (?, ?, ?, ?, ?, NOW(), 1)";
     $stmt = $conn->prepare($sql);
-    $stmt->execute([$u_ID, $team_ID, $finalContent]);
+    $stmt->execute([$u_ID, $team_ID, $suggest_name, $type_ID, $finalContent]);
 
     $suggestId = $conn->lastInsertId();
 
@@ -338,9 +369,21 @@ if ($action === "updateSuggest") {
     $suggest_ID = $_POST["suggest_ID"] ?? 0;
     $team_ID = $_POST["team_ID"] ?? 0;
     $content = $_POST["content"] ?? "";
+    $suggest_name = $_POST["suggest_name"] ?? "";
+    $type_ID = $_POST["type_ID"] ?? null;
 
     if (!$suggest_ID || !$team_ID || trim($content) === "") {
         respond(["success" => false, "msg" => "參數錯誤"]);
+    }
+    
+    // 驗證 type_ID（如果提供）
+    if ($type_ID !== null && $type_ID !== "") {
+        $type_ID = (int)$type_ID;
+        if ($type_ID <= 0) {
+            $type_ID = null;
+        }
+    } else {
+        $type_ID = null;
     }
 
     // 處理多行內容：忽略只有編號的行，然後重新編號
@@ -423,10 +466,10 @@ if ($action === "updateSuggest") {
 
     // 更新資料
     $sql = "UPDATE suggest 
-            SET suggest_comment = ?, suggest_d = NOW() 
+            SET suggest_name = ?, type_ID = ?, suggest_comment = ?, suggest_d = NOW() 
             WHERE suggest_ID = ? AND team_ID = ?";
     $stmt = $conn->prepare($sql);
-    $stmt->execute([$finalContent, $suggest_ID, $team_ID]);
+    $stmt->execute([$suggest_name, $type_ID, $finalContent, $suggest_ID, $team_ID]);
 
     respond(["success" => true, "msg" => "已更新建議", "suggest_ID" => $suggest_ID]);
 }

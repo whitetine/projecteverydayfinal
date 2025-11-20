@@ -4,9 +4,10 @@ require "../includes/pdo.php";
 date_default_timezone_set("Asia/Taipei");
 
 /* ==========================================
-   權限：僅科辦 (role_ID = 2)
+   權限：主任 (role_ID = 1) 和 科辦 (role_ID = 2)
 ========================================== */
-if (!isset($_SESSION["role_ID"]) || $_SESSION["role_ID"] != 2) {
+$role_ID = $_SESSION["role_ID"] ?? null;
+if (!isset($role_ID) || !in_array($role_ID, [1, 2])) {
     die("無權限");
 }
 
@@ -42,6 +43,29 @@ $stmt = $conn->prepare("SELECT cohort_name FROM cohortdata WHERE cohort_ID = ?")
 $stmt->execute([$cohort_ID]);
 $cohort = $stmt->fetch(PDO::FETCH_ASSOC);
 $cohort_name = $cohort['cohort_name'] ?? '';
+
+// 取得標題（直接使用資料庫的 suggest_name）
+// 從該屆別和類組的所有建議中取得最新的標題
+$stmt = $conn->prepare("
+    SELECT s.suggest_name 
+    FROM suggest s
+    JOIN teamdata t ON s.team_ID = t.team_ID
+    WHERE t.cohort_ID = ? 
+      AND t.group_ID = ?
+      AND s.suggest_status IN (1, 2, 3, 4)
+      AND s.suggest_name IS NOT NULL
+      AND TRIM(s.suggest_name) != ''
+    ORDER BY s.suggest_d DESC, s.suggest_ID DESC
+    LIMIT 1
+");
+$stmt->execute([$cohort_ID, $group_ID]);
+$title_result = $stmt->fetch(PDO::FETCH_ASSOC);
+
+// 直接使用資料庫的 suggest_name
+$page_title = '';
+if ($title_result && isset($title_result['suggest_name']) && trim($title_result['suggest_name']) !== '') {
+    $page_title = trim($title_result['suggest_name']);
+}
 
 // 取得該屆別和類組的所有團隊
 $sql = "SELECT 
@@ -81,11 +105,11 @@ foreach ($teams as $team) {
     $stmt->execute([$team_ID]);
     $members = $stmt->fetchAll(PDO::FETCH_ASSOC);
     
-    // 取得最新建議
-    $sql = "SELECT suggest_comment 
+    // 取得最新建議（包含標題和狀態）
+    $sql = "SELECT suggest_comment, suggest_name, suggest_status 
             FROM suggest 
             WHERE team_ID = ? 
-              AND suggest_status = 1
+              AND suggest_status IN (1, 2, 3, 4)
             ORDER BY suggest_d DESC 
             LIMIT 1";
     
@@ -93,12 +117,25 @@ foreach ($teams as $team) {
     $stmt->execute([$team_ID]);
     $suggest = $stmt->fetch(PDO::FETCH_ASSOC);
     $suggest_comment = $suggest['suggest_comment'] ?? '';
+    $suggest_status = $suggest['suggest_status'] ?? null;
+    
+    // 狀態對應文字
+    $status_text = '—';
+    if ($suggest_status == 3) {
+        $status_text = '通過';
+    } elseif ($suggest_status == 4) {
+        $status_text = '複審';
+    } elseif ($suggest_status == 2) {
+        $status_text = '不通過';
+    }
     
     $teamData[] = [
         'team_ID' => $team_ID,
         'project_name' => $team['team_project_name'],
         'members' => $members,
-        'suggest' => $suggest_comment
+        'suggest' => $suggest_comment,
+        'status' => $status_text,
+        'suggest_name' => $suggest['suggest_name'] ?? null
     ];
 }
 ?>
@@ -107,7 +144,7 @@ foreach ($teams as $team) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?php echo htmlspecialchars($group_name); ?> 專題期中審查結果</title>
+    <title><?php echo htmlspecialchars($page_title); ?></title>
     <style>
     :root {
         --kai: "DFKai-SB", "BiauKai", "標楷體", "Microsoft JhengHei", serif;
@@ -200,7 +237,11 @@ foreach ($teams as $team) {
 </head>
 <body>
     <div class="header">
-        <div class="title"><?php echo htmlspecialchars($group_name); ?> 專題期中審查結果</div>
+        <?php if (!empty($page_title)): ?>
+            <div class="title"><?php echo htmlspecialchars($page_title); ?></div>
+        <?php else: ?>
+            <div class="title" style="color: #999; font-style: italic;">（尚未設定標題）</div>
+        <?php endif; ?>
     </div>
     
     <table>
@@ -225,7 +266,7 @@ foreach ($teams as $team) {
                     echo implode('<br>', $memberList);
                     ?>
                 </td>
-                <td class="review-result col-result">—</td>
+                <td class="review-result col-result"><?php echo htmlspecialchars($team['status']); ?></td>
                 <td class="suggest col-comment">
                     <?php 
                     if (!empty($team['suggest'])) {
@@ -249,9 +290,8 @@ foreach ($teams as $team) {
     <script>
         window.onload = function() {
             // 生成檔案名稱
-            const groupName = '<?php echo htmlspecialchars($group_name, ENT_QUOTES); ?>';
-            const cohortName = '<?php echo htmlspecialchars($cohort_name, ENT_QUOTES); ?>';
-            const fileName = (groupName || '建議') + '_專題期中審查結果_' + new Date().toISOString().slice(0, 10) + '.pdf';
+            const pageTitle = '<?php echo htmlspecialchars($page_title, ENT_QUOTES); ?>';
+            const fileName = (pageTitle || '建議') + '_' + new Date().toISOString().slice(0, 10) + '.pdf';
             
             // 取得要轉換的元素
             const element = document.body;

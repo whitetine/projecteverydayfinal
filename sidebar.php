@@ -97,6 +97,19 @@ if (!isset($_SESSION['u_ID'])) {
     <!-- <a class="nav-link ajax-link" href="pages/milestone.php">
      <i class="fa-solid fa-flag-checkered"></i><span>里程碑管理</span></a> -->
 
+  <?php elseif ($role_ID == 2): ?>
+    <!-- 科辦專屬頁面 -->
+    <a class="nav-link ajax-link" href="pages/office.php">
+      <i class="fa-solid fa-building"></i><span>科辦管理</span></a>
+    <a class="nav-link ajax-link" href="pages/file.php">
+      <i class="fa-solid fa-folder-open"></i><span>文件管理</span></a>
+    <a class="nav-link ajax-link" href="pages/apply.php">
+      <i class="fa-solid fa-file-arrow-up"></i><span>申請文件審核</span></a>
+    <a class="nav-link ajax-link" href="pages/suggest.php">
+      <i class="fa-solid fa-bullhorn"></i><span>期中期末建議</span></a>
+    <a class="nav-link ajax-link" href="pages/work_draft.php">
+      <i class="fa-solid fa-file-pen"></i><span>工作日誌查看</span></a>
+
   <?php endif; ?>
 
 </div>
