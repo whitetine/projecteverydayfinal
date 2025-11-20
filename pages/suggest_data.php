@@ -149,9 +149,12 @@ if ($action === "addSuggest") {
         
         // 檢查是否只有編號（如：1. 或 2 或 . 或 2) 等）
         // 匹配：開頭是數字+標點符號，後面只有空白或沒有內容
+        // 也匹配：只有數字+小數點（如：2.2 但沒有其他內容）
         if (preg_match('/^\s*\d+[\.\、\)\:]\s*$/u', $trimmedLine) || 
             preg_match('/^\s*\d+\s*$/u', $trimmedLine) ||
-            preg_match('/^\s*[\.\、\)\:]\s*$/u', $trimmedLine)) {
+            preg_match('/^\s*[\.\、\)\:]\s*$/u', $trimmedLine) ||
+            // 匹配像 "2.2" 這種只有數字和小數點的（但沒有其他文字）
+            preg_match('/^\s*\d+\.\d+\s*$/u', $trimmedLine)) {
             continue; // 跳過只有編號的行
         }
         
@@ -193,8 +196,17 @@ if ($action === "addSuggest") {
             $content = $trimmedLine;
         }
         
-        // 確保有內容
-        if ($content !== "") {
+        // 確保有內容（去掉編號後不能為空）
+        $content = trim($content);
+        // 過濾掉：空內容、只有標點、只有數字、只有數字+標點
+        // 特別檢查：如果內容是 "2." 這種格式，也要過濾掉
+        if ($content !== "" && 
+            $content !== "." && 
+            !preg_match('/^\d+\.?\s*$/', $content) &&
+            !preg_match('/^[\.\、\)\:]\s*$/', $content) &&
+            !preg_match('/^\d+[\.\、\)\:]\s*$/', $content) &&
+            // 額外檢查：確保不是只有數字+點（如 "2."）
+            !preg_match('/^\d+\.$/', $content)) {
             // 加上新編號
             $cleanLines[] = $newNumber . ". " . $content;
             $newNumber++;
@@ -248,9 +260,12 @@ if ($action === "updateSuggest") {
         if ($trimmedLine === "") continue;
         
         // 檢查是否只有編號（如：1. 或 2 或 . 或 2) 等）
+        // 也匹配：只有數字+小數點（如：2.2 但沒有其他內容）
         if (preg_match('/^\s*\d+[\.\、\)\:]\s*$/u', $trimmedLine) || 
             preg_match('/^\s*\d+\s*$/u', $trimmedLine) ||
-            preg_match('/^\s*[\.\、\)\:]\s*$/u', $trimmedLine)) {
+            preg_match('/^\s*[\.\、\)\:]\s*$/u', $trimmedLine) ||
+            // 匹配像 "2.2" 這種只有數字和小數點的（但沒有其他文字）
+            preg_match('/^\s*\d+\.\d+\s*$/u', $trimmedLine)) {
             continue; // 跳過只有編號的行
         }
         
@@ -287,7 +302,17 @@ if ($action === "updateSuggest") {
             $content = $trimmedLine;
         }
         
-        if ($content !== "") {
+        // 確保有內容（去掉編號後不能為空）
+        $content = trim($content);
+        // 過濾掉：空內容、只有標點、只有數字、只有數字+標點
+        // 特別檢查：如果內容是 "2." 這種格式，也要過濾掉
+        if ($content !== "" && 
+            $content !== "." && 
+            !preg_match('/^\d+\.?\s*$/', $content) &&
+            !preg_match('/^[\.\、\)\:]\s*$/', $content) &&
+            !preg_match('/^\d+[\.\、\)\:]\s*$/', $content) &&
+            // 額外檢查：確保不是只有數字+點（如 "2."）
+            !preg_match('/^\d+\.$/', $content)) {
             $cleanLines[] = $newNumber . ". " . $content;
             $newNumber++;
         }

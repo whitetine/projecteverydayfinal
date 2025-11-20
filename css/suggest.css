@@ -81,7 +81,7 @@
     font-size: 15px;
     border: 1px solid #cfd3d7;
     border-radius: 8px;
-    resize: vertical;
+    resize: none;
     line-height: 1.5;
     transition: border .2s ease;
     background: #fafafa;
