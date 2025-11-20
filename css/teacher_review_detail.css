@@ -1,0 +1,38 @@
+.table-matrix{ table-layout:fixed; width:100%; }
+.table-matrix th, .table-matrix td {
+  text-align:center;
+  vertical-align:middle;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+
+.cell-self {
+  background:#f6f6f6;
+}
+
+.nowrap { white-space:nowrap; }
+
+.sticky-head th{
+  position:sticky;
+  top:0;
+  background:#f8f9fa;
+  z-index:2;
+}
+
+/* 分數/評論切換 */
+.cell-score{ 
+  display:block; 
+  font-weight:600; 
+}
+
+.cell-comment{
+  display:none;
+  text-align:left;
+  max-height:48px;
+  overflow:auto;
+  white-space:pre-wrap;
+  padding:.25rem;
+}
+
+.comment-mode .cell-score{ display:none; }
+.comment-mode .cell-comment{ display:block; }

@@ -830,9 +830,11 @@ function updateModalLayout() {
   }
   
   // 更新被評分團隊欄位的顯示狀態
+  // 只有在 cross 模式、dualMode 為 true，且有被評分團隊內容時才顯示
   const receiveField = document.getElementById('receiveTeamField');
   if (receiveField) {
-    receiveField.classList.toggle('d-none', !isDual);
+    const hasReceiveContent = Array.isArray(teamPickerState.receiveIds) && teamPickerState.receiveIds.length > 0;
+    receiveField.classList.toggle('d-none', !isDual || !hasReceiveContent);
   }
   
   updateMirrorButtonState();
@@ -854,8 +856,9 @@ function applyTeamPickerMode(mode) {
   }
 
   if (receiveField) {
-    // 只有在 cross 模式且 dualMode 為 true 時才顯示被評分團隊欄位
-    receiveField.classList.toggle('d-none', mode !== 'cross' || !teamPickerState.dualMode);
+    // 只有在 cross 模式、dualMode 為 true，且有被評分團隊內容時才顯示被評分團隊欄位
+    const hasReceiveContent = Array.isArray(teamPickerState.receiveIds) && teamPickerState.receiveIds.length > 0;
+    receiveField.classList.toggle('d-none', mode !== 'cross' || !teamPickerState.dualMode || !hasReceiveContent);
   }
   if (receiveTrigger) {
     receiveTrigger.setAttribute('aria-disabled', mode === 'cross' ? 'false' : 'true');
@@ -920,6 +923,14 @@ function updateTeamSummaryDisplay() {
     role: 'receive',
     disabledText: '僅團隊間互評可設定'
   });
+  
+  // 更新被評分團隊欄位的顯示狀態：沒有內容時隱藏
+  const receiveField = document.getElementById('receiveTeamField');
+  if (receiveField) {
+    const hasReceiveContent = Array.isArray(teamPickerState.receiveIds) && teamPickerState.receiveIds.length > 0;
+    const shouldShow = teamPickerState.mode === 'cross' && teamPickerState.dualMode && hasReceiveContent;
+    receiveField.classList.toggle('d-none', !shouldShow);
+  }
 }
 
 function renderPickerDisplay(config) {
@@ -1261,8 +1272,13 @@ function editRow(row) {
   teamPickerState.dualMode = receiveList.length > 0;
   // 如果有被評分團隊資料，顯示被評分團隊欄位
   const receiveField = document.getElementById('receiveTeamField');
-  if (receiveField && teamPickerState.dualMode && teamPickerState.mode === 'cross') {
-    receiveField.classList.remove('d-none');
+  if (receiveField) {
+    const hasReceiveContent = receiveList.length > 0;
+    if (teamPickerState.dualMode && teamPickerState.mode === 'cross' && hasReceiveContent) {
+      receiveField.classList.remove('d-none');
+    } else {
+      receiveField.classList.add('d-none');
+    }
   }
   // 載入對應屆別的團隊，預選現有值
   loadTeamList(selectedCohort, selectedClass, selectionPayload);

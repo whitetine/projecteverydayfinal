@@ -31,8 +31,8 @@ $isAdmin = in_array($role_ID, [1, 2]);
       <i class="fa-solid fa-folder-open"></i><span>文件管理(更新)</span></a>
        <a class="nav-link ajax-link" href="pages/apply.php">
       <i class="fa-solid fa-file-arrow-up"></i><span>申請文件上傳</span></a>
-       <a class="nav-link ajax-link" href="pages/teacher_review_status.php">
-      <i class="fa-solid fa-star"></i><span>互評(status)</span></a>
+       <!-- <a class="nav-link ajax-link" href="pages/teacher_review_status.php">
+      <i class="fa-solid fa-star"></i><span>互評(status)</span></a> -->
           <a class="nav-link ajax-link" href="pages/work_draft.php">
       <i class="fa-solid fa-file-pen"></i><span>查看工作日誌</span></a>
           <!-- <a class="nav-link ajax-link" href="pages/work_save.php">
@@ -47,6 +47,12 @@ $isAdmin = in_array($role_ID, [1, 2]);
       <a class="nav-link ajax-link" href="pages/checkreviewperiods.php">
       <i class="fa-solid fa-eye"></i><span>評分時段管理</span></a>
      
+      <a class="nav-link ajax-link" href="pages/teacher_review_detail.php">
+      <i class="fa-solid fa-file-pen"></i><span>互評(detail)</span></a>
+
+      <a class="nav-link ajax-link" href="pages/teacher_review_status.php">
+      <i class="fa-solid fa-file-pen"></i><span>互評(status)</span></a>
+      
        <!-- <a class="nav-link ajax-link" href="pages/admin_notify.php">
       <i class="fa-solid fa-file-lines"></i><span>notify</span></a> -->
       <?php elseif ($role_ID == 6): ?>
