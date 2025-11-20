@@ -84,6 +84,8 @@ if (!isset($_SESSION['u_ID'])) {
       <i class="fa-solid fa-flag-checkered"></i><span>里程碑管理</span></a>
     <a class="nav-link ajax-link" href="pages/work_draft.php">
       <i class="fa-solid fa-file-pen"></i><span>查看工作日誌</span></a>
+    <a class="nav-link ajax-link" href="pages/teacher_task&req.php">
+      <i class="fa-solid fa-eye"></i><span>專題需求牆</span></a>
 
   <?php elseif ($role_ID == 3): ?>
     <a class="nav-link ajax-link" href="pages/checkreviewperiods.php">

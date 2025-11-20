@@ -19,7 +19,7 @@ switch ($_GET["do"]) {
     // 取得所有基本需求，where狀態、時間
     case "get_requirement":
         echo json_encode(
-            fetchAll(query("SELECT * FROM `requirementdata` WHERE `req_status` = 1 AND `req_start_d` <= CURDATE() AND ( `req_end_d` >= CURDATE() OR `req_end_d` IS NULL ) AND `group_ID` = '{$p["ID"]}';"))
+            fetchAll(query("SELECT r.*,u.u_name,CASE WHEN rp.rp_status IS NULL THEN 0 ELSE rp.rp_status END AS status FROM `requirementdata` AS r LEFT JOIN (SELECT rp1.* FROM `reprogressdata` AS rp1 INNER JOIN (SELECT req_ID,MAX(rp_ID) AS max_rp_ID FROM `reprogressdata` GROUP BY req_ID) AS t ON t.req_ID=rp1.req_ID AND t.max_rp_ID=rp1.rp_ID) AS rp ON rp.req_ID=r.req_ID LEFT JOIN `userdata` AS u ON u.u_ID=rp.rp_u_ID WHERE r.req_status=1 AND r.req_start_d<=CURDATE() AND (r.req_end_d>=CURDATE() OR r.req_end_d IS NULL) AND r.group_ID='{$p["ID"]}' ORDER BY `status`;"))
         );
         break;
     // 取得該團隊的任務
@@ -67,7 +67,7 @@ switch ($_GET["do"]) {
             $status,
             {$p["form"]["priority"]},
             '{$_SESSION["u_ID"]}',
-            CURRENT_TIMESTAMP)";
+            CURRENT_TIMESTAMP())";
         query($sql);
         break;
 
@@ -115,8 +115,9 @@ switch ($_GET["do"]) {
     // case "req_return_submit":
     //     query("INSERT INTO `reprogressdata` (`rp_ID`, `req_ID`, `rp_team_ID`, `rp_u_ID`, `rp_status`, `rp_completed_d`, `rp_approved_d`, `rp_approved_u_ID`, `rp_remark`) VALUES (NULL, '{$p["req_ID"]}', '{$p["now_team_ID"]}', '{$_SESSION["u_ID"]}', '1', CURRENT_TIMESTAMP(), NULL, NULL, '{$p["form"]["rp_remark"]}');");
     //     break;
-
-
+    case "req_return_click":
+        query("INSERT INTO `reprogressdata` (`rp_ID`, `req_ID`, `rp_team_ID`, `rp_u_ID`, `rp_status`, `rp_completed_d`, `rp_approved_d`, `rp_approved_u_ID`, `rp_remark`) VALUES (NULL, '{$p["req_ID"]}', '{$p["now_team_ID"]}', '{$_SESSION["u_ID"]}', '1', current_timestamp(), NULL, NULL, NULL);");
+        break;
 
 
 

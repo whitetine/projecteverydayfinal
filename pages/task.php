@@ -1,252 +1,6 @@
 <link rel="stylesheet" href="css/group_manage.css?v=<?= time() ?>">
+<link rel="stylesheet" href="css/task.css?v=<?= time() ?>">
 <?php session_start(); ?>
-<style>
-    /* 外層：整個需求牆，左右兩塊 */
-    .req-wall {
-        display: flex;
-        justify-content: space-between;
-        gap: 16px;
-        /* 左右空隙 */
-    }
-
-    /* 單一看板：最多佔畫面的一半 */
-    .req-board {
-        flex: 0 0 50%;
-        /* 每塊大約佔 50% 寬度 */
-        max-width: 50%;
-        background: #ffffff;
-        border-radius: 12px;
-        box-shadow: 0 4px 18px rgba(0, 0, 0, 0.08);
-        padding: 16px 20px;
-        box-sizing: border-box;
-    }
-
-    /* 標題列 */
-    .req-board-header {
-        display: flex;
-        align-items: baseline;
-        justify-content: space-between;
-        margin-bottom: 12px;
-    }
-
-    .req-board-title {
-        font-size: 22px;
-        margin: 0;
-    }
-
-    .req-board-sub {
-        font-size: 14px;
-        color: #777;
-    }
-
-    /* 卡片列表 */
-    .req-card-list {
-        display: flex;
-        flex-direction: column;
-        gap: 12px;
-        max-height: 60vh;
-        /* 太多筆時就出現卷軸 */
-        overflow-y: auto;
-        padding-right: 4px;
-    }
-
-    /* 單張卡片 */
-    .req-card {
-        display: flex;
-        border-radius: 10px;
-        border: 1px solid #e3e3e3;
-        background-color: #fafafa;
-    }
-
-    .req-color-bar {
-        width: 6px;
-    }
-
-    /* 卡片內容 */
-    .req-card-body {
-        padding: 10px 12px;
-        flex: 1;
-        font-size: 14px;
-    }
-
-    .req-card-title-row {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        gap: 6px;
-        margin-bottom: 4px;
-    }
-
-    .req-card-title {
-        font-size: 16px;
-        font-weight: 600;
-        margin: 0;
-        word-break: break-all;
-    }
-
-    /* 狀態 badge */
-    .req-status-badge {
-        font-size: 12px;
-        padding: 2px 8px;
-        border-radius: 999px;
-        white-space: nowrap;
-    }
-
-    /* 依照 req_status 調整顏色，可自己再改 */
-    .req-status-badge.status-1 {
-        background-color: #e3f2fd;
-        color: #1565c0;
-    }
-
-    .req-status-badge.status-2 {
-        background-color: #fff3cd;
-        color: #856404;
-    }
-
-    .req-status-badge.status-3 {
-        background-color: #f8d7da;
-        color: #721c24;
-    }
-
-    .req-direction {
-        margin: 4px 0 6px;
-        color: #555;
-        line-height: 1.4;
-        word-break: break-all;
-    }
-
-    .req-meta-row,
-    .req-date-row {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 8px 16px;
-        font-size: 12px;
-        color: #888;
-        margin-bottom: 4px;
-    }
-
-    .req-count-row {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 4px;
-        align-items: center;
-        margin-top: 4px;
-    }
-
-    .req-count-label {
-        font-size: 12px;
-        color: #555;
-    }
-
-    .req-count-tag {
-        font-size: 12px;
-        padding: 2px 6px;
-        border-radius: 999px;
-        background-color: #e0f7fa;
-        color: #006064;
-    }
-
-    /* 如果你希望小螢幕時改成全寬，可以打開這段 */
-    /*
-@media (max-width: 992px) {
-    .req-board {
-        max-width: 100vw;
-    }
-}
-*/
-    /* 以下是篩選條件的CSS */
-    /* 按鈕群組的外層 */
-    .req-filter-group {
-        margin: 10px 0;
-    }
-
-    /* 篩選按鈕共同樣式 */
-    .req-filter-btn {
-        border: 1px solid #ccc;
-        background: #f7f7f7;
-        color: #333;
-        padding: 6px 14px;
-        border-radius: 6px;
-        margin-right: 6px;
-        cursor: pointer;
-        transition: all 0.2s ease;
-    }
-
-    /* 滑過效果 */
-    .req-filter-btn:hover {
-        background: #eaeaea;
-    }
-
-    /* 被選中的按鈕 */
-    .req-filter-btn.active {
-        background: #007bff;
-        /* 想換色自己改 */
-        color: white;
-        border-color: #007bff;
-    }
-
-    .req-filter-row {
-        display: flex;
-        align-items: center;
-        flex-wrap: nowrap;
-        /* 🔥 禁止換行 */
-        gap: 8px;
-        /* 🔥 按鈕彼此的距離 */
-        margin: 6px 0;
-    }
-
-    .req-filter-all {
-        display: flex;
-        align-items: center;
-        gap: 20px;
-        /* 兩組之間距離 */
-        flex-wrap: nowrap;
-        /* 不允許換行 */
-        margin-bottom: 10px;
-    }
-
-    /* task表單用的 */
-    /* 讓這一排一定撐滿整個格子 */
-    .modal-body table {
-        width: 100%;
-    }
-
-    .modal-body td {
-        width: 100%;
-    }
-
-    /* input-group 本身也要吃滿 */
-    .modal-body .input-group {
-        width: 100%;
-    }
-
-    /* 每一個 select 在 input-group 裡都要自動撐滿可用空間 */
-    .modal-body .input-group .form-select {
-        flex: 1 1 0;
-        width: 100%;
-    }
-
-    .input-group .form-range {
-        padding: 0 10px;
-        flex: 1;
-    }
-
-    /* range加框線 */
-    .input-group.range-group .form-range {
-        flex: 1;
-        /* 吃滿右邊空間 */
-        padding: 0 10px;
-        border: 2px solid #000;
-        /* 跟其他欄位一樣有邊框 */
-        border-left: 1;
-        /* 左邊跟 label 接起來就好 */
-        border-radius: 0 5px 5px 0;
-        /* 右上右下圓角，可依你其他欄位改 */
-        height: calc(2.5rem + 2px);
-        /* 高度跟 text input 差不多 */
-        background-color: #fff;
-    }
-</style>
 <div class="group-management-container" id="task_app">
     <div class="page-header">
         <h1 class="page-title">
@@ -263,6 +17,7 @@
             <div class="req-board-header">
                 <h2 class="req-board-title">
                     目前基本需求({{ now_group.name }})
+
                 </h2>
                 <span class="req-board-sub">共 {{ all_requirement.length }} 筆</span>
             </div>
@@ -277,6 +32,9 @@
                 <button class="req-filter-btn" :class="{ active: filter.requirement_status === 'taken' }"
                     @click="filter.requirement_status = 'taken'">審核中</button>
 
+                <button class="req-filter-btn" :class="{ active: filter.requirement_status === 'return' }"
+                    @click="filter.requirement_status = 'return'">被退件</button>
+
                 <button class="req-filter-btn" :class="{ active: filter.requirement_status === 'done' }"
                     @click="filter.requirement_status = 'done'">已完成</button>
             </div>
@@ -289,6 +47,10 @@
                             <h3 class="req-card-title">
                                 {{ item.req_title }}
                             </h3>
+                            <span class="req-count-tag" v-if="item.status==0">未回報</span>
+                            <span class="req-count-tag" v-if="item.status==1">審核中</span>
+                            <span class="req-count-tag" v-if="item.status==2">被退件</span>
+                            <span class="req-count-tag" v-if="item.status==3">已通過</span>
                         </div>
                         <p class="req-direction">
                             {{ item.req_direction }}
@@ -570,7 +332,7 @@
                         <button class="btn btn-secondary" style="margin-right: 14px;">**查看相關連結里程碑、任務</button>
                         <button class="btn btn-warning" @click="task_modal_show('req',now_requirement.req_ID)"
                             style="margin-right: 14px;">建立任務</button>
-                        <button class="btn btn-primary" @click="req_return_click">回報該需求</button>
+                        <button class="btn btn-primary" @click="req_return_click" v-if="now_requirement.status==0">回報該需求</button>
                     </div>
                     <!-- <div class="modal-footer" v-else>
                         <button class="btn btn-secondary" @click="this.req_return=false"
@@ -669,7 +431,7 @@
             console.warn('卸載 task app 時出錯:', e);
         }
     }
-    
+
     window.taskVueApp = null;
 
     if (!window.taskVueApp) {
@@ -833,22 +595,26 @@
                         })
                 },
                 req_return_click() {
-
+                    $.post("../modules/task.php?do=req_return_click", { now_team_ID: this.now_team_ID, req_ID: this.now_requirement.req_ID })
+                        .done(() => {
+                            toast({ type: 'success', title: '已回報，待指導老師審核' })
+                            $('#req_look_modal').modal('hide')
+                        })
                     // this.req_return = true
                     // this.return_form.count1 = this.now_requirement.req_count[0]
                     // this.return_form.count3 = this.now_requirement.req_count[2]
                 },
-                req_return_submit() {
-                    if (!this.return_form.rp_remark || (this.return_form.count1 && !this.return_form.count2)) {
-                        toast({ type: 'error', title: '請完整填寫回報！' })
-                    } else {
-                        $.post("../modules/task.php?do=req_return_submit", { form: this.return_form, now_team_ID: this.now_team_ID, req_ID: this.now_requirement.req_ID })
-                            .done(() => {
-                                $('#req_look_modal').modal('hide')
-                                toast({ type: 'success', title: '送出成功，等待審核！' })
-                            })
-                    }
-                }
+                // req_return_submit() {
+                //     if (!this.return_form.rp_remark || (this.return_form.count1 && !this.return_form.count2)) {
+                //         toast({ type: 'error', title: '請完整填寫回報！' })
+                //     } else {
+                //         $.post("../modules/task.php?do=req_return_submit", { form: this.return_form, now_team_ID: this.now_team_ID, req_ID: this.now_requirement.req_ID })
+                //             .done(() => {
+                //                 $('#req_look_modal').modal('hide')
+                //                 toast({ type: 'success', title: '送出成功，等待審核！' })
+                //             })
+                //     }
+                // }
             },
             mounted() {
                 this.get_requirement();
