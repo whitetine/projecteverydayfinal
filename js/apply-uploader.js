@@ -10,11 +10,43 @@ window.mountApplyUploader = function(mountSelector) {
         applyOther: '',
         previewPercent: 50,
         imagePreview: null,
+        imageNaturalWidth: 0,
+        imageNaturalHeight: 0,
         files: [],
         selectedFileUrl: ''
       };
     },
-
+    computed: {
+      scaledImageStyle() {
+        if (!this.imagePreview) {
+          return { maxWidth: '100%', height: 'auto', width: 'auto' };
+        }
+        const scale = this.previewPercent / 100;
+        
+        // 如果有原始尺寸，直接計算縮放後的實際尺寸
+        if (this.imageNaturalWidth && this.imageNaturalHeight) {
+          let displayWidth = this.imageNaturalWidth * scale;
+          let displayHeight = this.imageNaturalHeight * scale;
+          
+          return {
+            width: displayWidth + 'px',
+            height: displayHeight + 'px',
+            maxWidth: 'none',
+            objectFit: 'contain',
+            display: 'block'
+          };
+        }
+        
+        // 如果還沒有載入尺寸，先顯示原始大小
+        return {
+          maxWidth: '100%',
+          width: 'auto',
+          height: 'auto',
+          objectFit: 'contain',
+          display: 'block'
+        };
+      }
+    },
     //-------
     methods: {
       async submitForm() {
@@ -36,12 +68,22 @@ window.mountApplyUploader = function(mountSelector) {
           const res = await fetch('pages/somefunction/upload.php', { method: 'POST', body: fd });
           const data = await res.json();
           if (data.status === 'success') {
-            Swal.fire('成功', data.message, 'success');
+            Swal.fire({
+              icon: 'success',
+              title: '已送出',
+              text: '您的申請已成功送出，請等待審核',
+              confirmButtonText: '確定',
+              customClass: {
+                popup: 'swal2-popup-success'
+              }
+            });
 
             //1015update
             formEl.reset();
             this.applyOther = '';
             this.imagePreview = '';
+            this.imageNaturalWidth = 0;
+            this.imageNaturalHeight = 0;
             this.selectedFileID = '';
             // 重置後重新設置申請人姓名
             if (window.CURRENT_USER && window.CURRENT_USER.u_name) {
@@ -63,9 +105,17 @@ window.mountApplyUploader = function(mountSelector) {
           const reader = new FileReader();
           reader.onload = (event)=>{
             this.imagePreview = event.target.result;
+            // 重置縮放比例
+            this.previewPercent = 100;
           };
           reader.readAsDataURL(file);
         }
+      },
+      onImageLoad(e){
+        // 圖片載入完成後，獲取原始尺寸
+        const img = e.target;
+        this.imageNaturalWidth = img.naturalWidth;
+        this.imageNaturalHeight = img.naturalHeight;
       },
       async fetchFiles() {
         try {
@@ -88,9 +138,9 @@ window.mountApplyUploader = function(mountSelector) {
     watch:{
       selectedFileID(newVal){
         if(newVal){
-          const file = this.files.find(f => f.file_ID == newVal);
-          if (file && file.file_url) {
-            this.selectedFileUrl = file.file_url;
+          const file = this.files.find(f => f.doc_ID == newVal);
+          if (file && file.doc_example) {
+            this.selectedFileUrl = file.doc_example;
           } else {
             this.selectedFileUrl = `templates/file_${newVal}.pdf`;
           }
