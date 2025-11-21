@@ -379,7 +379,7 @@ switch ($sort) {
 }
 
 /* CRUD: create */
-if ($_POST['action'] ?? '' === 'create') {
+if (($_POST['action'] ?? '') === 'create') {
     try {
     // 檢查欄位是否存在
     $hasCohortId = false;
@@ -469,7 +469,7 @@ if ($_POST['action'] ?? '' === 'create') {
 }
 
 /* CRUD: update */
-if ($_POST['action'] ?? '' === 'update') {
+if (($_POST['action'] ?? '') === 'update') {
     try {
     // 檢查欄位是否存在
     $hasCohortId = false;
@@ -546,14 +546,20 @@ if ($_POST['action'] ?? '' === 'update') {
 }
 
 /* CRUD: delete */
-if ($_POST['action'] ?? '' === 'delete') {
-    $stmt = $conn->prepare("DELETE FROM perioddata WHERE period_ID=?");
-    $stmt->execute([$_POST['period_ID']]);
+if (($_POST['action'] ?? '') === 'delete') {
+    $periodId = (int)($_POST['period_ID'] ?? 0);
+    if ($periodId > 0) {
+        $stmt = $conn->prepare("DELETE FROM perioddata WHERE period_ID=?");
+        $stmt->execute([$periodId]);
+    }
+    if (isAjaxRequest()) {
+        jsonResponse(['success' => true, 'msg' => '已刪除評分時段']);
+    }
     header("Location: checkreviewperiods.php?sort=$sort");
     exit;
 }
 
-if ($_POST['action'] ?? '' === 'toggle_status') {
+if (($_POST['action'] ?? '') === 'toggle_status') {
     $periodId = (int)($_POST['period_ID'] ?? 0);
     $targetStatus = (int)($_POST['target_status'] ?? 0) === 1 ? 1 : 0;
     $success = false;
@@ -840,7 +846,7 @@ foreach ($tmp as $r) $rankByCreated[$r['period_ID']] = $i++;
         <button class="btn btn-sm btn-outline-primary" 
           onclick='editRow(<?= json_encode($r, JSON_UNESCAPED_UNICODE) ?>)'>編輯</button>
 
-        <form method="post" action="pages/checkreviewperiods_data.php" class="d-inline" onsubmit="return confirm('確定刪除？');">
+        <form method="post" action="pages/checkreviewperiods_data.php" class="d-inline period-delete-form">
           <input type="hidden" name="action" value="delete">
           <input type="hidden" name="period_ID" value="<?= $r['period_ID'] ?>">
           <input type="hidden" name="sort" value="<?= htmlspecialchars($sort) ?>">

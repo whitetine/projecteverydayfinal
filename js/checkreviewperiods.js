@@ -93,7 +93,7 @@ function __initCheckReviewPeriods() {
   try { loadPeriodTable(); } catch (e) { console.error(e); }
   try { setupModeSelector(); } catch (e) { console.error(e); }
   try { setupTeamPicker(); } catch (e) { console.error(e); }
-  try { setupStatusToggleDelegation(); } catch (e) { console.error(e); }
+  try { setupPeriodTableDelegation(); } catch (e) { console.error(e); }
 }
 // 初始化函數
 function initCheckReviewPeriods() {
@@ -558,60 +558,6 @@ function setupTeamPicker() {
   updateModalLayout();
 }
 
-function setupStatusToggleDelegation() {
-  const container = document.getElementById('periodTable');
-  if (!container || container.dataset.statusToggleBound === 'true') return;
-  container.dataset.statusToggleBound = 'true';
-  container.addEventListener('click', (event) => {
-    const button = event.target.closest('.btn-status-toggle');
-    if (!button) return;
-    event.preventDefault();
-    handleStatusToggleClick(button);
-  });
-}
-
-function handleStatusToggleClick(button) {
-  const periodId = button.dataset.periodId;
-  const nextStatus = button.dataset.nextStatus === '1' ? 1 : 0;
-  if (!periodId) return;
-  togglePeriodStatus(periodId, nextStatus, button);
-}
-
-async function togglePeriodStatus(periodId, nextStatus, button) {
-  const apiUrl = resolveCheckReviewPeriodsApiUrl();
-  const formData = new FormData();
-  formData.set('action', 'toggle_status');
-  formData.set('period_ID', periodId);
-  formData.set('target_status', nextStatus);
-
-  button.disabled = true;
-  button.classList.add('loading');
-
-  try {
-    const res = await fetch(apiUrl, {
-      method: 'POST',
-      credentials: 'same-origin',
-      headers: { 'X-Requested-With': 'XMLHttpRequest' },
-      body: formData
-    });
-    const result = await res.json();
-    if (!res.ok || !result.success) {
-      throw new Error(result?.msg || '切換失敗');
-    }
-    await loadPeriodTable();
-  } catch (err) {
-    console.error('切換啟用狀態失敗:', err);
-    if (window.Swal) {
-      Swal.fire('錯誤', err.message || '切換啟用狀態失敗', 'error');
-    } else {
-      alert(err.message || '切換啟用狀態失敗');
-    }
-  } finally {
-    button.disabled = false;
-    button.classList.remove('loading');
-  }
-}
-
 function updateMirrorButtonState() {
   const mirrorBtn = document.getElementById('teamPickerMirror');
   if (!mirrorBtn) return;
@@ -1054,5 +1000,55 @@ function resetForm() {
 
 window.editRow = editRow;
 window.resetForm = resetForm;
+
+function setupPeriodTableDelegation() {
+  const container = document.getElementById('periodTable');
+  if (!container || container.dataset.tableDelegation === 'true') return;
+  container.dataset.tableDelegation = 'true';
+  container.addEventListener('submit', (event) => {
+    const form = event.target;
+    if (!form.classList || !form.classList.contains('period-delete-form')) {
+      return;
+    }
+    event.preventDefault();
+    handlePeriodDelete(form);
+  });
+}
+
+async function handlePeriodDelete(form) {
+  if (!form) return;
+  const confirmed = typeof window.confirm === 'function'
+    ? window.confirm('確定刪除？')
+    : true;
+  if (!confirmed) return;
+  const actionUrl = form.getAttribute('action') || resolveCheckReviewPeriodsApiUrl();
+  const formData = new FormData(form);
+  formData.set('action', 'delete');
+  try {
+    const res = await fetch(actionUrl, {
+      method: 'POST',
+      body: formData,
+      credentials: 'same-origin',
+      headers: { 'X-Requested-With': 'XMLHttpRequest' }
+    });
+    let result = null;
+    try {
+      result = await res.json();
+    } catch (err) {
+      result = null;
+    }
+    if (!res.ok || (result && result.success === false)) {
+      throw new Error(result?.msg || `刪除失敗 (HTTP ${res.status})`);
+    }
+    await loadPeriodTable();
+  } catch (err) {
+    console.error('刪除失敗:', err);
+    if (window.Swal) {
+      Swal.fire('錯誤', err.message || '刪除失敗', 'error');
+    } else {
+      alert(err.message || '刪除失敗');
+    }
+  }
+}
 
 })();
