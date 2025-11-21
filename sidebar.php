@@ -26,6 +26,9 @@ if (!isset($_SESSION['u_ID'])) {
     <a class="nav-link ajax-link" href="pages/team_apply_review.php">
       <i class="fa-solid fa-clipboard-check"></i><span>專題申請審核</span>
     </a>
+    <a class="nav-link ajax-link" href="pages/schedule_manage.php">
+      <i class="fa-solid fa-calendar-alt"></i><span>時程表管理</span>
+    </a>
     <a class="nav-link ajax-link" href="pages/group_manage.php">
       <i class="fa-solid fa-layer-group"></i><span>類組管理</span>
     </a>
@@ -116,6 +119,9 @@ if (!isset($_SESSION['u_ID'])) {
       <i class="fa-solid fa-building"></i><span>科辦管理</span></a>
     <a class="nav-link ajax-link" href="pages/team_apply_review.php">
       <i class="fa-solid fa-clipboard-check"></i><span>專題申請審核</span>
+    </a>
+    <a class="nav-link ajax-link" href="pages/schedule_manage.php">
+      <i class="fa-solid fa-calendar-alt"></i><span>時程表管理</span>
     </a>
     <a class="nav-link ajax-link" href="pages/file.php">
       <i class="fa-solid fa-folder-open"></i><span>文件管理</span></a>

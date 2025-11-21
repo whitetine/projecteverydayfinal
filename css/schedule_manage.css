@@ -1,0 +1,443 @@
+/* 時程表管理頁面樣式 */
+
+.schedule-manage-container {
+    padding: 1.5rem;
+    max-width: 100%;
+    margin: 0 auto;
+    background: #fff;
+    box-sizing: border-box;
+    overflow-x: hidden;
+}
+
+.page-header {
+    margin-bottom: 2rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+}
+
+.header-controls {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.time-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.time-input-group {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.time-input-group label {
+    font-weight: 600;
+    color: #374151;
+    margin: 0;
+    white-space: nowrap;
+}
+
+.time-input-group .form-control {
+    min-width: 200px;
+}
+
+.time-input-group .form-control[readonly] {
+    background-color: #f8f9fa;
+    cursor: not-allowed;
+}
+
+.page-title {
+    font-size: 1.75rem;
+    font-weight: 600;
+    color: #1f2937;
+    margin: 0;
+}
+
+.cohort-selector {
+    display: flex;
+    align-items: center;
+}
+
+.cohort-selector label {
+    font-weight: 600;
+    color: #374151;
+    margin: 0;
+}
+
+.card {
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+    margin-bottom: 1.5rem;
+    background: transparent;
+}
+
+.card-header {
+    background: transparent;
+    color: #333;
+    border-radius: 0;
+    padding: 1rem 0;
+    border: none;
+    border-bottom: none;
+    margin-bottom: 1rem;
+}
+
+.card-body {
+    padding: 0;
+    background: white;
+}
+
+/* 移除水平滾動 */
+#scheduleTableContainer {
+    overflow-x: hidden;
+    overflow-y: visible;
+    width: 100%;
+}
+
+/* 紫色標題欄 */
+.table-header-bar {
+    display: flex;
+    width: 100%;
+    background: linear-gradient(135deg, #673ab7 0%, #512da8 100%);
+    border: 2px solid #000;
+    border-bottom: 1px solid #000;
+    font-family: 'Microsoft JhengHei', '微軟正黑體', 'Arial', sans-serif;
+}
+
+.header-cell {
+    flex: 1;
+    padding: 16px 12px;
+    text-align: center;
+    color: #fff;
+    font-weight: 700;
+    font-size: 18px;
+    border-right: 1px solid rgba(255, 255, 255, 0.3);
+    white-space: nowrap;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.header-cell:last-child {
+    border-right: none;
+}
+
+.header-cell:nth-child(1) {
+    flex: 0 0 12%;
+}
+
+.header-cell:nth-child(2) {
+    flex: 0 0 6%;
+}
+
+.header-cell:nth-child(3) {
+    flex: 0 0 15%;
+}
+
+.header-cell:nth-child(4) {
+    flex: 0 0 15%;
+}
+
+.header-cell:nth-child(5) {
+    flex: 0 0 32%;
+}
+
+.header-cell:nth-child(6) {
+    flex: 0 0 20%;
+}
+
+.card-header h5 {
+    margin: 0;
+    font-weight: 600;
+}
+
+.card-body {
+    padding: 1.5rem;
+    box-sizing: border-box;
+    overflow-x: hidden;
+}
+
+/* 表單樣式 */
+.form-group label {
+    font-weight: 600;
+    color: #374151;
+    margin-bottom: 0.5rem;
+}
+
+.form-control {
+    border-radius: 8px;
+    border: 1px solid #d1d5db;
+    padding: 0.75rem;
+}
+
+.form-control:focus {
+    border-color: #667eea;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+/* 表格樣式 - 仿照圖片格式 */
+#scheduleTable {
+    margin: 0;
+    width: 100%;
+    border-collapse: collapse;
+    background: white;
+    font-size: 16px;
+    border: 2px solid #000;
+    border-top: 1px solid #000;
+    table-layout: fixed;
+    min-width: 0;
+    font-family: 'Microsoft JhengHei', '微軟正黑體', 'Arial', sans-serif;
+}
+
+#scheduleTable thead th {
+    background: #e8e8e8;
+    font-weight: 600;
+    color: #000;
+    border: 1px solid #000;
+    padding: 12px 10px;
+    text-align: center;
+    vertical-align: middle;
+    font-size: 18px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-family: 'Microsoft JhengHei', '微軟正黑體', 'Arial', sans-serif;
+}
+
+#scheduleTable thead th:nth-child(1) {
+    width: 12%;
+}
+
+#scheduleTable thead th:nth-child(2) {
+    width: 6%;
+}
+
+#scheduleTable thead th:nth-child(3) {
+    width: 15%;
+}
+
+#scheduleTable thead th:nth-child(4) {
+    width: 15%;
+}
+
+#scheduleTable thead th:nth-child(5) {
+    width: 32%;
+}
+
+#scheduleTable thead th:nth-child(6) {
+    width: 20%;
+}
+
+#scheduleTable tbody td {
+    padding: 12px 10px;
+    vertical-align: middle;
+    border: 1px solid #000;
+    background: white;
+    word-wrap: break-word;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 0;
+    text-align: center;
+    font-size: 16px;
+    font-family: 'Microsoft JhengHei', '微軟正黑體', 'Arial', sans-serif;
+}
+
+#scheduleTable tbody tr {
+    transition: background-color 0.15s;
+}
+
+#scheduleTable tbody tr:hover:not(.special-time-row) {
+    background-color: #f5f5f5;
+}
+
+#scheduleTable tbody tr.selected {
+    background-color: #e3f2fd !important;
+}
+
+#scheduleTable tbody tr.special-time-row {
+    background-color: #fffacd !important;
+    cursor: pointer;
+    font-weight: 600;
+}
+
+#scheduleTable tbody tr.special-time-row:hover {
+    background-color: #fff8dc !important;
+}
+
+#scheduleTable tbody tr.special-time-row td {
+    border: 1px solid #000;
+    text-align: center;
+}
+
+#scheduleTable tbody tr.special-time-row td.project-cell {
+    text-align: center;
+    font-size: 15px;
+    font-weight: 600;
+}
+
+.team-row {
+    cursor: move;
+    transition: background-color 0.2s, transform 0.2s;
+    user-select: none;
+}
+
+.team-row:hover {
+    background-color: #f9fafb;
+    transform: translateX(4px);
+}
+
+.team-row * {
+    cursor: move;
+    user-select: none;
+}
+
+.sortable-ghost {
+    opacity: 0.4;
+    background-color: #e5e7eb !important;
+}
+
+.sortable-drag {
+    opacity: 0.8;
+    transform: rotate(2deg);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.sortable-chosen {
+    background-color: #e0e7ff;
+}
+
+.sequence-cell {
+    text-align: center;
+    font-weight: 600;
+    color: #000;
+    font-size: 16px;
+}
+
+.time-cell {
+    text-align: center;
+    font-weight: 500;
+    color: #000;
+    font-family: 'Microsoft JhengHei', '微軟正黑體', 'Arial', sans-serif;
+    font-size: 16px;
+    white-space: nowrap;
+}
+
+.student-cell {
+    text-align: center;
+    color: #000;
+    line-height: 2;
+    padding: 12px 10px;
+    font-size: 16px;
+}
+
+.name-cell {
+    text-align: center;
+    color: #000;
+    line-height: 2;
+    padding: 12px 10px;
+    font-size: 16px;
+}
+
+.project-cell {
+    text-align: center;
+    font-weight: 500;
+    color: #000;
+    padding: 12px 10px;
+    font-size: 16px;
+    line-height: 1.8;
+}
+
+.teacher-cell {
+    text-align: center;
+    color: #000;
+    line-height: 2;
+    padding: 12px 10px;
+    font-size: 16px;
+}
+
+/* 按鈕樣式 */
+.btn {
+    border-radius: 8px;
+    padding: 0.75rem 1.5rem;
+    font-weight: 600;
+    transition: all 0.2s;
+}
+
+.btn-primary {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border: none;
+}
+
+.btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+.btn-success {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    border: none;
+}
+
+.btn-success:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+}
+
+.btn-secondary {
+    background: #6b7280;
+    border: none;
+}
+
+.btn-secondary:hover {
+    background: #4b5563;
+    transform: translateY(-2px);
+}
+
+/* 響應式設計 */
+@media (max-width: 768px) {
+    .schedule-manage-container {
+        padding: 1rem;
+    }
+    
+    .card-body {
+        padding: 1rem;
+    }
+    
+    #scheduleTable {
+        font-size: 0.875rem;
+    }
+    
+    #scheduleTable thead th,
+    #scheduleTable tbody td {
+        padding: 0.5rem;
+    }
+    
+    .student-cell,
+    .name-cell {
+        font-size: 0.8rem;
+    }
+}
+
+/* 載入動畫 */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.team-row {
+    animation: fadeIn 0.3s ease-in;
+}
+

@@ -262,7 +262,7 @@ mounted() {
         $(CONTENT_SEL).html('<div class="alert alert-danger m-3">載入失敗：' + (xhr?.status || '') + ' ' + (xhr?.statusText || '') + '</div>');
         return;
       }
-
+      
       // 确保 CSS 已加载后再显示内容（防止跑版）
       const userManagementContent = $(CONTENT_SEL).find('#userManagementContent');
       if (userManagementContent.length > 0) {

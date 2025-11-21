@@ -60,16 +60,23 @@
 
 .user-card-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-    gap: 1.5rem;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 1.25rem;
     margin-bottom: 2rem;
+}
+
+@media (min-width: 1400px) {
+    .user-card-grid {
+        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+        gap: 1.5rem;
+    }
 }
 
 .user-card {
     background: #fff;
-    border-radius: 16px;
+    border-radius: 12px;
     padding: 0;
-    box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+    box-shadow: 0 3px 12px rgba(0,0,0,0.08);
     transition: all 0.3s ease;
     border: 1px solid #e9ecef;
     overflow: hidden;
@@ -130,7 +137,7 @@
     display: flex;
     align-items: center;
     gap: 1rem;
-    padding: 1.5rem;
+    padding: 1.25rem;
     padding-bottom: 1rem;
     border-bottom: 1px solid #f0f0f0;
 }
@@ -153,12 +160,12 @@
 }
 
 .user-avatar {
-    width: 64px;
-    height: 64px;
+    width: 56px;
+    height: 56px;
     border-radius: 50%;
     object-fit: cover;
-    border: 3px solid #ffc107;
-    box-shadow: 0 2px 8px rgba(255,193,7,0.3);
+    border: 2px solid #ffc107;
+    box-shadow: 0 2px 6px rgba(255,193,7,0.25);
     /* 防止图片加载时导致布局重排 */
     display: block;
     flex-shrink: 0;
@@ -171,7 +178,7 @@
 }
 
 .user-name {
-    font-size: 1.1rem;
+    font-size: 1rem;
     font-weight: 600;
     color: #1a1a2e;
     margin: 0 0 0.25rem 0;
@@ -188,8 +195,8 @@
 
 .user-details {
     display: grid;
-    gap: 0.75rem;
-    padding: 1.5rem;
+    gap: 0.65rem;
+    padding: 1.25rem;
     padding-top: 1rem;
     margin-bottom: 0;
 }
@@ -243,9 +250,9 @@
 
 .user-actions {
     display: flex;
-    gap: 0.75rem;
+    gap: 0.65rem;
     margin-top: 0;
-    padding: 1rem 1.5rem;
+    padding: 0.875rem 1.25rem;
     border-top: 1px solid #f0f0f0;
     background: #f8f9fa;
     align-items: center;
@@ -275,9 +282,10 @@
 
 .btn-action {
     flex: 1;
-    padding: 0.6rem 1rem;
+    padding: 0.5rem 0.875rem;
     border-radius: 8px;
     font-weight: 500;
+    font-size: 0.875rem;
     transition: all 0.3s ease;
     border: none;
     cursor: pointer;

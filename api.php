@@ -61,6 +61,11 @@ case in_array($do, ['get_milestones', 'get_requirements', 'get_teams', 'get_requ
         require __DIR__ . '/modules/team_apply.php';
         break;
 
+    // 時程表管理
+    case in_array($do, ['get_teams_schedule', 'get_schedule_info', 'save_schedule_info', 'save_team_schedules', 'get_groups']):
+        require __DIR__ . '/modules/schedule.php';
+        break;
+
     default:
         // 統一以 JSON 提示未知 action（避免前端誤判「不是 JSON」）
         json_err('Unknown action: ' . $do);

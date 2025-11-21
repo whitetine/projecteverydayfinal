@@ -14,9 +14,9 @@ $search = trim($_GET['search'] ?? '');
 $role_filter = $_GET['role_filter'] ?? '';
 $status_filter = $_GET['status_filter'] ?? '';
 $cohort_filter = $_GET['cohort_filter'] ?? '';
-$grade_filter = $_GET['grade_filter'] ?? '';
+$class_filter = $_GET['class_filter'] ?? '';
 
-// 构建查询
+// 构建查询 - 使用 LEFT JOIN 並使用 GROUP BY 確保每個用戶只返回一筆記錄
 $sql = "SELECT 
             u.u_ID,
             u.u_name,
@@ -24,19 +24,19 @@ $sql = "SELECT
             u.u_profile,
             u.u_img,
             u.u_status,
-            r.role_ID,
-            r.role_name,
+            MAX(r.role_ID) as role_ID,
+            MAX(r.role_name) as role_name,
             s.status_ID,
             s.status_name,
-            c.c_ID,
-            c.c_name as class_name,
-            e.cohort_ID,
-            ch.cohort_name,
-            e.enroll_grade
+            MAX(c.c_ID) as c_ID,
+            MAX(c.c_name) as class_name,
+            MAX(e.cohort_ID) as cohort_ID,
+            MAX(ch.cohort_name) as cohort_name,
+            MAX(e.enroll_grade) as enroll_grade
         FROM userdata u
+        LEFT JOIN statusdata s ON s.status_ID = u.u_status
         LEFT JOIN userrolesdata ur ON u.u_ID = ur.ur_u_ID AND ur.user_role_status = 1
         LEFT JOIN roledata r ON ur.role_ID = r.role_ID
-        LEFT JOIN statusdata s ON s.status_ID = u.u_status
         LEFT JOIN enrollmentdata e ON e.enroll_u_ID = u.u_ID AND e.enroll_status = 1
         LEFT JOIN classdata c ON c.c_ID = e.class_ID
         LEFT JOIN cohortdata ch ON ch.cohort_ID = e.cohort_ID
@@ -53,7 +53,13 @@ if ($search) {
 }
 
 if ($role_filter) {
-    $sql .= " AND r.role_ID = ?";
+    $sql .= " AND EXISTS (
+        SELECT 1 
+        FROM userrolesdata ur 
+        WHERE ur.ur_u_ID = u.u_ID 
+        AND ur.role_ID = ? 
+        AND ur.user_role_status = 1
+    )";
     $params[] = $role_filter;
 }
 
@@ -63,25 +69,46 @@ if ($status_filter !== '') {
 }
 
 if ($cohort_filter) {
-    $sql .= " AND e.cohort_ID = ?";
+    $sql .= " AND EXISTS (
+        SELECT 1 
+        FROM enrollmentdata e 
+        WHERE e.enroll_u_ID = u.u_ID 
+        AND e.cohort_ID = ? 
+        AND e.enroll_status = 1
+    )";
     $params[] = $cohort_filter;
 }
 
-if ($grade_filter !== '') {
-    $sql .= " AND e.enroll_grade = ?";
-    $params[] = $grade_filter;
+if ($class_filter !== '') {
+    $sql .= " AND EXISTS (
+        SELECT 1 
+        FROM enrollmentdata e 
+        WHERE e.enroll_u_ID = u.u_ID 
+        AND e.class_ID = ? 
+        AND e.enroll_status = 1
+    )";
+    $params[] = $class_filter;
 }
 
+$sql .= " GROUP BY u.u_ID, u.u_name, u.u_gmail, u.u_profile, u.u_img, u.u_status, s.status_ID, s.status_name";
 $sql .= " ORDER BY u.u_ID ASC";
 
-$stmt = $conn->prepare($sql);
-$stmt->execute($params);
-$users = $stmt->fetchAll(PDO::FETCH_ASSOC);
+try {
+    $stmt = $conn->prepare($sql);
+    $stmt->execute($params);
+    $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
+} catch (Exception $e) {
+    // 如果查詢失敗，顯示錯誤訊息
+    echo '<div class="alert alert-danger">查詢錯誤：' . htmlspecialchars($e->getMessage()) . '</div>';
+    echo '<div class="alert alert-info">SQL: ' . htmlspecialchars($sql) . '</div>';
+    $users = [];
+}
 
 // 获取角色列表用于筛选
 $roles = $conn->query("SELECT * FROM roledata WHERE role_status = 1 ORDER BY role_ID")->fetchAll(PDO::FETCH_ASSOC);
 $statuses = $conn->query("SELECT * FROM statusdata")->fetchAll(PDO::FETCH_ASSOC);
 $cohorts = $conn->query("SELECT * FROM cohortdata ORDER BY cohort_ID DESC")->fetchAll(PDO::FETCH_ASSOC);
+$classes = $conn->query("SELECT * FROM classdata ORDER BY c_ID")->fetchAll(PDO::FETCH_ASSOC);
 ?>
 
 <!-- CSS 已在 head.php 中预加载，这里确保加载 -->
@@ -194,22 +221,22 @@ $cohorts = $conn->query("SELECT * FROM cohortdata ORDER BY cohort_ID DESC")->fet
             </div>
             <div>
                 <label class="form-label">
-                    <i class="fa-solid fa-sort-numeric-up me-2"></i>年級
+                    <i class="fa-solid fa-users me-2"></i>班級
                 </label>
-                <select name="grade_filter" class="form-select">
-                    <option value="">全部年級</option>
-                    <?php for ($g = 1; $g <= 6; $g++): ?>
-                        <option value="<?= $g ?>" <?= $grade_filter == $g ? 'selected' : '' ?>>
-                            <?= $g ?>年級
+                <select name="class_filter" class="form-select">
+                    <option value="">全部班級</option>
+                    <?php foreach ($classes as $class): ?>
+                        <option value="<?= $class['c_ID'] ?>" <?= $class_filter == $class['c_ID'] ? 'selected' : '' ?>>
+                            <?= htmlspecialchars($class['c_name']) ?>
                         </option>
-                    <?php endfor; ?>
+                    <?php endforeach; ?>
                 </select>
             </div>
             <div style="display: flex; align-items: center; gap: 0.5rem; flex-shrink: 0;">
                 <button type="submit" class="btn btn-warning" style="min-width: 100px; white-space: nowrap;">
                     <i class="fa-solid fa-filter me-2"></i>篩選
                 </button>
-                <?php if ($search || $role_filter || $status_filter !== '' || $cohort_filter || $grade_filter !== ''): ?>
+                <?php if ($search || $role_filter || $status_filter !== '' || $cohort_filter || $class_filter !== ''): ?>
                 <a href="#pages/admin_usermanage.php" class="btn btn-outline-secondary ajax-link" style="min-width: 100px; white-space: nowrap;">
                     <i class="fa-solid fa-times me-2"></i>清除
                 </a>
@@ -229,21 +256,35 @@ $cohorts = $conn->query("SELECT * FROM cohortdata ORDER BY cohort_ID DESC")->fet
             <?php foreach ($users as $user): ?>
                 <?php 
                 // 判斷是否為學生（role_ID = 6）
-                $isStudent = ($user['role_ID'] == 6);
+                $isStudent = (isset($user['role_ID']) && $user['role_ID'] == 6);
+                $hasRole = !empty($user['role_name']);
+                $hasCohort = !empty($user['cohort_name']);
                 ?>
                 <div class="user-card" data-user-id="<?= htmlspecialchars($user['u_ID']) ?>" style="cursor: pointer;">
                     <!-- 頭上顯示：非學生顯示身份，學生顯示學級 -->
-                    <?php if ($isStudent && !empty($user['cohort_name'])): ?>
+                    <?php if ($isStudent && $hasCohort): ?>
                         <!-- 學生顯示學級 -->
                         <div class="user-cohort-badge">
                             <i class="fa-solid fa-calendar-alt me-2"></i>
                             <?= htmlspecialchars($user['cohort_name']) ?>
                         </div>
-                    <?php elseif (!$isStudent && !empty($user['role_name'])): ?>
+                    <?php elseif (!$isStudent && $hasRole): ?>
                         <!-- 非學生顯示身份 -->
                         <div class="user-role-badge">
                             <i class="fa-solid fa-user-tag me-2"></i>
                             <?= htmlspecialchars($user['role_name']) ?>
+                        </div>
+                    <?php elseif ($hasRole): ?>
+                        <!-- 如果有角色但沒有學級，也顯示角色 -->
+                        <div class="user-role-badge">
+                            <i class="fa-solid fa-user-tag me-2"></i>
+                            <?= htmlspecialchars($user['role_name']) ?>
+                        </div>
+                    <?php elseif ($hasCohort): ?>
+                        <!-- 如果有學級但沒有角色，也顯示學級 -->
+                        <div class="user-cohort-badge">
+                            <i class="fa-solid fa-calendar-alt me-2"></i>
+                            <?= htmlspecialchars($user['cohort_name']) ?>
                         </div>
                     <?php endif; ?>
                     
@@ -251,18 +292,16 @@ $cohorts = $conn->query("SELECT * FROM cohortdata ORDER BY cohort_ID DESC")->fet
                         <?php if (!empty($user['u_img'])): ?>
                             <img src="headshot/<?= htmlspecialchars($user['u_img']) ?>" 
                                  alt="" class="user-avatar"
-                                 loading="lazy"
-                                 style="width: 64px; height: 64px; object-fit: cover; border-radius: 50%; border: 3px solid #ffc107; box-shadow: 0 2px 8px rgba(255,193,7,0.3);">
+                                 loading="lazy">
                         <?php else: ?>
                             <img src="https://cdn-icons-png.flaticon.com/512/1144/1144760.png" 
                                  alt="" class="user-avatar"
-                                 loading="lazy"
-                                 style="width: 64px; height: 64px; object-fit: cover; border-radius: 50%; border: 3px solid #ffc107; box-shadow: 0 2px 8px rgba(255,193,7,0.3);">
+                                 loading="lazy">
                         <?php endif; ?>
                         <div class="user-info">
                             <div class="user-name-row">
                                 <h3 class="user-name"><?= htmlspecialchars($user['u_name']) ?></h3>
-                                <?php if ($isStudent && !empty($user['role_name'])): ?>
+                                <?php if ($isStudent && $hasRole): ?>
                                 <!-- 只有學生才在名字後面顯示身份 -->
                                 <span class="badge badge-custom badge-role-inline">
                                     <?= htmlspecialchars($user['role_name']) ?>
