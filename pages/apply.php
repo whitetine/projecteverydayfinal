@@ -17,7 +17,7 @@ if ($currentUser['u_ID'] !== '') {
             $currentUser['u_name'] = (string)($row['u_name'] ?? '');
         }
     } catch (Throwable $e) {
-        // 若查詢失敗則退回 session 內的名稱（若有）
+        // 若查詢失敗則退回 session 內的名稱
     }
 }
 
