@@ -8,17 +8,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   $isAjax = ($_POST['ajax'] ?? '') === '1';
 
   if ($id && in_array($action, ['approve', 'reject'], true)) {
-    $status = ($action === 'approve') ? 3 : 2; // 3=已通過, 2=退件
-    // 這裡用 applydata（和下面 SELECT 一致）
+    $status = ($action === 'approve') ? 1 : 2; // 1=已通過, 2=退件；0=待審
     $stmt = $conn->prepare(
-      "UPDATE applydata 
-       SET apply_status = ?, apply_b_u_ID = ?, approved_d = NOW()
-       WHERE apply_ID = ?"
+      "UPDATE docsubdata 
+       SET dcsub_status = ?, dc_approved_u_ID = ?, dcsub_approved_d = NOW()
+       WHERE sub_ID = ?"
     );
     $stmt->execute([$status, $_SESSION['u_ID'] ?? 0, $id]);
 
     if ($isAjax) {
-      echo json_encode(['ok' => true, 'new_status' => $status, 'status_text' => ($status === 3 ? '已通過' : '退件')], JSON_UNESCAPED_UNICODE);
+      echo json_encode(['ok' => true, 'new_status' => $status, 'status_text' => ($status === 1 ? '已通過' : '退件')], JSON_UNESCAPED_UNICODE);
       exit;
     }
     header("Location: apply_preview.php");
@@ -31,12 +30,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 try {
-  $sql  = "select  a.*, f.file_ID , f.file_name, u.u_ID as apply_user
-              from applydata a 
-              left join filedata f on a.file_ID = f.file_ID
-              left join userdata u on a.apply_a_u_ID = u.u_ID
-              order by a.apply_status asc, a.apply_created_d desc
-              ";
+  $sql  = "SELECT s.*, f.doc_name, u.u_name AS apply_user, f.doc_ID as file_ID
+              FROM docsubdata s
+              LEFT JOIN docdata f ON s.doc_ID = f.doc_ID
+              LEFT JOIN userdata u ON s.dcsub_u_ID = u.u_ID
+              ORDER BY s.dcsub_status ASC, s.dcsub_sub_d DESC";
   $rows = $conn->query($sql)->fetchAll(PDO::FETCH_ASSOC);
 
   $fileTypes = $conn->query("SELECT file_ID, file_name FROM filedata")
@@ -122,43 +120,41 @@ try {
           <tbody>
             <?php foreach ($rows as $r): ?>
               <tr
-                data-fileid="<?= htmlspecialchars((string)($r['file_ID'] ?? ''), ENT_QUOTES) ?>".
-
-                data-filename="<?= htmlspecialchars($r['apply_other'] ?? '', ENT_QUOTES) ?>"
-
+                data-fileid="<?= htmlspecialchars((string)($r['doc_ID'] ?? ''), ENT_QUOTES) ?>"
+                data-filename="<?= htmlspecialchars($r['dcsub_comment'] ?? '', ENT_QUOTES) ?>"
                 data-applicant="<?= htmlspecialchars($r['apply_user'] ?? '', ENT_QUOTES) ?>">
 
-                <td><?= htmlspecialchars($r['file_name'] ?? '') ?></td>
-                <td class="filename-cell"><?= htmlspecialchars($r['apply_other'] ?? '') ?></td>
+                <td><?= htmlspecialchars($r['doc_name'] ?? '') ?></td>
+                <td class="filename-cell"><?= htmlspecialchars($r['dcsub_comment'] ?? '') ?></td>
 
                 <td class="applicant-cell">
-                <?=htmlspecialchars($r['apply_user']??($r['apply_a_u_ID']??''))?>
+                <?=htmlspecialchars($r['apply_user'] ?? ($r['dcsub_u_ID'] ?? ''))?>
                 </td>
 
-                <td><?= htmlspecialchars($r['apply_created_d'] ?? '') ?></td>
+                <td><?= htmlspecialchars($r['dcsub_sub_d'] ?? '') ?></td>
 
                 <td>
                   
-                  <?php if (!empty($r['apply_url']) && preg_match('/\.(jpg|jpeg|png)$/i', $r['apply_url'])): ?>
-                    <img src="<?= htmlspecialchars($r['apply_url']) ?>"
+                  <?php if (!empty($r['dcsub_url']) && preg_match('/\.(jpg|jpeg|png)$/i', $r['dcsub_url'])): ?>
+                    <img src="<?= htmlspecialchars($r['dcsub_url']) ?>"
                       class="preview fixed-thumb"
                       style="width:100px;height:100px;object-fit:cover;border-radius:6px;cursor:pointer"
                       onclick="showModal(this.src)">
-                  <?php elseif (!empty($r['apply_url'])): ?>
-                    <a href="<?= htmlspecialchars($r['apply_url']) ?>" target="_blank">檔案</a>
+                  <?php elseif (!empty($r['dcsub_url'])): ?>
+                    <a href="<?= htmlspecialchars($r['dcsub_url']) ?>" target="_blank">檔案</a>
                   <?php else: ?>
                     無
                   <?php endif; ?>
                 </td>
 
                 <td class="status-cell">
-                  <?= ($r['apply_status'] == 1 ? '待審核' : ($r['apply_status'] == 2 ? '退件' : '已通過')) ?>
+                  <?= ((int)$r['dcsub_status'] === 0 ? '待審核' : ((int)$r['dcsub_status'] === 2 ? '退件' : '已通過')) ?>
                 </td>
 
                 <td class="op-cell">
-                  <?php if ((int)$r['apply_status'] === 1): ?>
-                    <button class="btn btn-success" onclick="updateStatus(<?= (int)$r['apply_ID'] ?>,'approve',this)">通過</button>
-                    <button class="btn btn-danger" onclick="updateStatus(<?= (int)$r['apply_ID'] ?>,'reject',this)">退件</button>
+                  <?php if ((int)$r['dcsub_status'] === 0): ?>
+                    <button class="btn btn-success" onclick="updateStatus(<?= (int)$r['sub_ID'] ?>,'approve',this)">通過</button>
+                    <button class="btn btn-danger" onclick="updateStatus(<?= (int)$r['sub_ID'] ?>,'reject',this)">退件</button>
                     <?php else: ?>-<?php endif; ?>
                 </td>
                 
@@ -206,6 +202,10 @@ try {
   );
   window.addEventListener('DOMContentLoaded', filterTable);
 
+  const APPLY_ENDPOINT = location.pathname.includes('/pages/')
+    ? 'apply_preview.php'
+    : 'pages/apply_preview.php';
+
   // 通過/退件：AJAX 更新
   function updateStatus(id, action, btn){
     const tr = btn.closest('tr');
@@ -220,7 +220,7 @@ try {
       reverseButtons: true
     }).then(r=>{
       if(!r.isConfirmed) return;
-      fetch('apply_preview.php', {
+      fetch(APPLY_ENDPOINT, {
         method: 'POST',
         headers: {'Content-Type':'application/x-www-form-urlencoded'},
         body: `apply_ID=${encodeURIComponent(id)}&action=${encodeURIComponent(action)}&ajax=1`
@@ -258,3 +258,4 @@ try {
     rows.forEach(r => tbody.appendChild(r));
   }
 </script> 
+
