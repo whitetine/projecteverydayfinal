@@ -37,7 +37,7 @@ try {
               ORDER BY s.dcsub_status ASC, s.dcsub_sub_d DESC";
   $rows = $conn->query($sql)->fetchAll(PDO::FETCH_ASSOC);
 
-  $fileTypes = $conn->query("SELECT file_ID, file_name FROM filedata")
+  $fileTypes = $conn->query("SELECT doc_ID as file_ID, doc_name as file_name FROM docdata WHERE doc_status = 1")
     ->fetchAll(PDO::FETCH_ASSOC);
 } catch (PDOException $e) {
   http_response_code(500);

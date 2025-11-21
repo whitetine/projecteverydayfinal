@@ -2,78 +2,6 @@
 session_start();
 require '../includes/pdo.php'; // 取得 $conn (PDO)
 
-$submitError = '';
-$isAjaxRequest = (strtolower($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '') === 'xmlhttprequest');
-
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $docId = isset($_POST['file_ID']) ? trim((string)$_POST['file_ID']) : '';
-    $comment = trim((string)($_POST['apply_other'] ?? ''));
-    $userId = (string)($_SESSION['u_ID'] ?? '');
-
-    if ($userId === '') {
-        $submitError = '登入逾時，請重新登入。';
-    } elseif ($docId === '') {
-        $submitError = '請選擇表單類型。';
-    } elseif (!isset($_FILES['apply_image']) || $_FILES['apply_image']['error'] !== UPLOAD_ERR_OK) {
-        $submitError = '請選擇要上傳的圖片。';
-    } else {
-        $file = $_FILES['apply_image'];
-        $ext = strtolower(pathinfo($file['name'] ?? '', PATHINFO_EXTENSION));
-        $allowedExt = ['jpg', 'jpeg', 'png'];
-        if (!in_array($ext, $allowedExt, true)) {
-            $submitError = '僅接受 JPG 或 PNG 圖片。';
-        } else {
-            $uploadDir = dirname(__DIR__) . '/uploads/docsub/';
-            if (!is_dir($uploadDir) && !mkdir($uploadDir, 0775, true) && !is_dir($uploadDir)) {
-                $submitError = '無法建立上傳資料夾。';
-            } else {
-                $newName = 'apply_' . date('Ymd_His') . '_' . bin2hex(random_bytes(3)) . '.' . $ext;
-                $absolute = $uploadDir . $newName;
-                $relative = 'uploads/docsub/' . $newName;
-
-                if (!move_uploaded_file($file['tmp_name'], $absolute)) {
-                    $submitError = '檔案儲存失敗。';
-                } else {
-                    try {
-                        $stmt = $conn->prepare("
-                            INSERT INTO docsubdata (
-                                doc_ID,
-                                dcsub_team_ID,
-                                dcsub_u_ID,
-                                dcsub_comment,
-                                dcsub_url,
-                                dcsub_sub_d,
-                                dc_approved_u_ID,
-                                dcsub_approved_d,
-                                dcsub_remark,
-                                dcsub_status
-                            ) VALUES (?, NULL, ?, ?, ?, NOW(), NULL, NULL, NULL, 0)
-                        ");
-                        $stmt->execute([$docId, $userId, $comment, $relative]);
-
-                        if ($isAjaxRequest) {
-                            echo json_encode(['ok' => true, 'message' => '申請已送出！'], JSON_UNESCAPED_UNICODE);
-                            exit;
-                        }
-
-                        header('Location: apply_preview.php');
-                        exit;
-                    } catch (Throwable $e) {
-                        $submitError = '寫入資料庫失敗：' . $e->getMessage();
-                        @unlink($absolute);
-                    }
-                }
-            }
-        }
-    }
-
-    if ($isAjaxRequest) {
-        http_response_code(400);
-        echo json_encode(['ok' => false, 'message' => $submitError ?: '送出失敗'], JSON_UNESCAPED_UNICODE);
-        exit;
-    }
-}
-
 // 🔹 查詢申請人姓名（從資料庫 userdata 表）
 $currentUser = [
     'u_ID' => (string)($_SESSION['u_ID'] ?? ''),
@@ -98,25 +26,6 @@ if ($currentUser['u_name'] === '' && isset($_SESSION['u_name'])) {
     $currentUser['u_name'] = (string)$_SESSION['u_name'];
 }
 ?>
-<style>
-    .apply-preview-stage {
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        min-height: 300px;
-        padding: 1.5rem;
-        overflow: visible;
-    }
-
-    .apply-preview-img {
-        width: 100%;
-        max-width: 520px;
-        height: auto;
-        transform-origin: center center;
-        transition: transform 0.2s ease, filter 0.2s ease;
-        filter: drop-shadow(0 6px 24px rgba(19, 23, 34, 0.15));
-    }
-</style>
 <header>
     <h2 class="mb-4">申請文件上傳</h2>
 </header>
@@ -130,11 +39,7 @@ if ($currentUser['u_name'] === '' && isset($_SESSION['u_name'])) {
                 <strong>上傳區</strong>
             </div>
             <div class="card-body">
-                <form method="post"
-                    action="<?= htmlspecialchars($_SERVER['PHP_SELF'] ?? '', ENT_QUOTES) ?>"
-                    enctype="multipart/form-data"
-                    id="applyForm"
-                    @submit.prevent="submitForm">
+                <form @submit.prevent="submitForm" enctype="multipart/form-data" id="applyForm">
 
                     <!-- 選擇表單類型與申請人姓名 -->
                     <div class="row mb-4">
@@ -150,10 +55,10 @@ if ($currentUser['u_name'] === '' && isset($_SESSION['u_name'])) {
 
                         <div class="col-md-6 mb-3">
                             <label class="form-label" for="apply_user">申請人姓名：</label>
-                            <input type="text" class="form-control" id="apply_user" v-model="applyUser" readonly>
+                            <input type="text" class="form-control" id="apply_user" v-model="applyUser" :value="applyUser || '<?= htmlspecialchars($currentUser['u_name'] ?? '', ENT_QUOTES, 'UTF-8') ?>'" value="<?= htmlspecialchars($currentUser['u_name'] ?? '', ENT_QUOTES, 'UTF-8') ?>" readonly>
 
                             <!-- 🔹隱藏欄位：確保表單送出時有帶值 -->
-                            <input type="hidden" name="apply_user" :value="applyUser">
+                            <input type="hidden" name="apply_user" :value="applyUser || '<?= htmlspecialchars($currentUser['u_name'] ?? '', ENT_QUOTES, 'UTF-8') ?>'">
                         </div>
 
                         <!-- 檔案名稱/其他備註 -->
@@ -179,14 +84,13 @@ if ($currentUser['u_name'] === '' && isset($_SESSION['u_name'])) {
                                 <div class="d-flex align-items-center gap-3 mb-3">
                                     <label class="form-label mb-0">預覽大小：</label>
                                     <span class="text-muted"><strong>{{ previewPercent }}%</strong></span>
-                                    <input type="range" class="form-range flex-grow-1" min="50" max="200" step="5"
+                                    <input type="range" class="form-range flex-grow-1" min="10" max="100" step="5"
                                         v-model.number="previewPercent" aria-label="調整預覽大小">
                                 </div>
-                                <div class="apply-preview-stage">
-                                    <img :src="imagePreview" class="apply-preview-img" alt="圖片預覽"
-                                        :style="{
-                                            transform: 'scale(' + (previewPercent / 100).toFixed(2) + ')'
-                                        }">
+                                <div class="preview-box text-center"
+                                    :style="{ width: previewPercent + '%', maxWidth: '100%', margin: '0 auto' }">
+                                    <img :src="imagePreview" class="preview-img img-fluid rounded shadow" alt="圖片預覽"
+                                        style="max-height: 400px; object-fit: contain;">
                                 </div>
                             </div>
                         </div>
@@ -214,5 +118,36 @@ if ($currentUser['u_name'] === '' && isset($_SESSION['u_name'])) {
 
 <script>
     window.CURRENT_USER = <?= json_encode($currentUser, JSON_UNESCAPED_UNICODE) ?>;
+    // 確保申請人姓名在 DOM 載入後立即設置（在 Vue 掛載前）
+    (function() {
+        function setUserName() {
+            if (window.CURRENT_USER && window.CURRENT_USER.u_name) {
+                const inputEl = document.getElementById('apply_user');
+                if (inputEl) {
+                    inputEl.value = window.CURRENT_USER.u_name;
+                }
+            }
+        }
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', setUserName);
+        } else {
+            setTimeout(setUserName, 0);
+        }
+    })();
 </script>
 <script src="../js/apply-uploader.js?v=<?= time() ?>"></script>
+<script>
+    (function () {
+        const mountIfNeeded = () => {
+            if (window.renderApplyPage || typeof window.mountApplyUploader !== 'function') {
+                return;
+            }
+            window.mountApplyUploader('#app');
+        };
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', mountIfNeeded, { once: true });
+        } else {
+            mountIfNeeded();
+        }
+    })();
+</script>
