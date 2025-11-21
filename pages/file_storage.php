@@ -1,7 +1,7 @@
 <?php
 header('Access-Control-Allow-Origin: *');
 header('Content-Type: application/json; charset=UTF-8');
-
+//c9 
 session_start();
 require '../includes/pdo.php';
 
