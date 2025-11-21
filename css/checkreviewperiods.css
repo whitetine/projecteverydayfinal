@@ -86,19 +86,13 @@
 }
 
 .multi-select-list {
-  min-height: 130px;
+  min-height: 210px;
   border-radius: 14px;
   border: 1px solid rgba(99, 102, 241, 0.22);
   padding: .45rem .65rem;
   font-size: 0.95rem;
   background: #fff;
   box-shadow: inset 0 2px 8px rgba(15, 23, 42, 0.08);
-}
-
-/* 調整屆別和班級選擇框的寬度，與對應的輸入框對齊 */
-#cohortSelect,
-#classSelect {
-  width: 100%;
 }
 
 .multi-select-list option {
@@ -179,50 +173,6 @@
 
 .team-picker-chip-small .remove {
   font-size: .9rem;
-}
-
-.period-pagination {
-  margin-top: .25rem;
-  padding: .65rem 1.5rem;
-  background: #fef1e7;
-  border-top: 3px solid #b4773b;
-  border-radius: 0 0 18px 18px;
-  display: inline-flex;
-  justify-content: center;
-  align-items: center;
-  gap: .25rem;
-  box-shadow: 0 18px 35px rgba(42, 24, 14, 0.08);
-  width: 100%;
-}
-
-.period-pagination .page-btn {
-  border: none;
-  background: transparent;
-  color: #6f4f38;
-  font-weight: 600;
-  font-size: 1rem;
-  padding: .1rem .6rem;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: background .15s ease, color .15s ease;
-}
-
-.period-pagination .page-btn.number {
-  cursor: default;
-}
-
-.period-pagination .page-btn.number.active {
-  background: #f28b31;
-  color: #fff;
-}
-
-.period-pagination .page-btn.nav {
-  font-size: 1.1rem;
-}
-
-.period-pagination .page-btn.nav.disabled {
-  color: rgba(111, 79, 56, 0.35);
-  cursor: not-allowed;
 }
 
 .team-picker-modal {

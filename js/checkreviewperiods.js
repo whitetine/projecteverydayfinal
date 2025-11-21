@@ -10,29 +10,6 @@ function resolveCheckReviewPeriodsApiUrl() {
   return 'pages/checkreviewperiods_data.php';
 }
 
-async function parseJsonResponse(res) {
-  const clone = res.clone();
-  try {
-    return await clone.json();
-  } catch (err) {
-    let rawText = '';
-    try {
-      rawText = await res.text();
-    } catch (readErr) {
-      console.warn('回應內容讀取失敗', readErr);
-    }
-    const cleaned = (rawText || '')
-      .replace(/<[^>]*>/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
-    const snippet = cleaned || rawText?.slice(0, 200) || `HTTP ${res.status} ${res.statusText || ''}`;
-    const error = new Error(`伺服器回傳非 JSON：${snippet}`);
-    error.raw = rawText;
-    error.status = res.status;
-    throw error;
-  }
-}
-
 let pendingClassValue = '';
 const teamPickerState = {
   enabled: true,
@@ -49,9 +26,6 @@ const teamPickerState = {
   pendingReceiveSelections: [],
   activePanel: 'assign'
 };
-const periodTableState = {
-  page: 1
-};
 
 function __initCheckReviewPeriods() {
   // 動態設定表單 action
@@ -66,22 +40,7 @@ function __initCheckReviewPeriods() {
     // 攔截表單提交，改用 AJAX
     form.addEventListener('submit', async function(e) {
       e.preventDefault();
-      if (!validatePeriodForm()) {
-        return;
-      }
       const formData = new FormData(form);
-      const actionField = document.getElementById('form_action');
-      if (actionField) {
-        formData.set('action', actionField.value || 'create');
-      }
-      const periodField = document.getElementById('period_ID');
-      if (periodField) {
-        formData.set('period_ID', periodField.value || '');
-      }
-      const statusField = document.getElementById('pe_status');
-      if (statusField) {
-        formData.set('pe_status', statusField.value || '1');
-      }
       const action = formData.get('action');
       
       try {
@@ -93,24 +52,28 @@ function __initCheckReviewPeriods() {
           },
           body: formData
         });
-        const result = await parseJsonResponse(res);
-        if (res.ok && result.success) {
-          // 成功後重新載入表格並清空表單
-          await loadPeriodTable();
-          resetForm();
-          // 顯示成功訊息
-          if (window.Swal) {
-            Swal.fire({
-              title: '成功',
-              text: result.msg || (action === 'create' ? '已新增評分時段' : '已更新評分時段'),
-              icon: 'success',
-              timer: 2000,
-              showConfirmButton: false
-            });
+        
+        if (res.ok) {
+          const result = await res.json();
+          if (result.success) {
+            // 成功後重新載入表格並清空表單
+            await loadPeriodTable();
+            resetForm();
+            // 顯示成功訊息
+            if (window.Swal) {
+              Swal.fire({
+                title: '成功',
+                text: result.msg || (action === 'create' ? '已新增評分時段' : '已更新評分時段'),
+                icon: 'success',
+                timer: 2000,
+                showConfirmButton: false
+              });
+            }
+          } else {
+            throw new Error(result.msg || '操作失敗');
           }
         } else {
-          const fallbackMsg = result?.msg || `HTTP ${res.status}`;
-          throw new Error(fallbackMsg);
+          throw new Error('HTTP ' + res.status);
         }
       } catch (err) {
         console.error('提交失敗:', err);
@@ -131,30 +94,6 @@ function __initCheckReviewPeriods() {
   try { setupModeSelector(); } catch (e) { console.error(e); }
   try { setupTeamPicker(); } catch (e) { console.error(e); }
   try { setupStatusToggleDelegation(); } catch (e) { console.error(e); }
-  try { setupDeleteDelegation(); } catch (e) { console.error(e); }
-}
-
-function validatePeriodForm() {
-  const startInput = document.getElementById('period_start_d');
-  const endInput = document.getElementById('period_end_d');
-  if (!startInput || !endInput) return true;
-  const startValue = startInput.value;
-  const endValue = endInput.value;
-  if (!startValue || !endValue) return true;
-  const startDate = new Date(startValue);
-  const endDate = new Date(endValue);
-  if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) return true;
-  if (endDate < startDate) {
-    const message = '結束日不可早於開始日';
-    if (window.Swal) {
-      Swal.fire('提醒', message, 'warning');
-    } else {
-      alert(message);
-    }
-    endInput.focus();
-    return false;
-  }
-  return true;
 }
 // 初始化函數
 function initCheckReviewPeriods() {
@@ -218,7 +157,7 @@ function setupCohortSelect() {
 
 function setupClassSelect() {
   const select = document.getElementById('classSelect');
-  if (!select || select.tagName !== 'SELECT') return;
+  if (!select) return;
   select.addEventListener('change', () => handleClassChange(true));
 }
 
@@ -285,11 +224,6 @@ function handleClassChange(triggerLoad = true) {
 function renderClassOptions(list) {
   const select = document.getElementById('classSelect');
   if (!select) return;
-  
-  // 如果是班導，classSelect 是 input 元素，不需要渲染選項
-  if (select.tagName !== 'SELECT') {
-    return;
-  }
 
   select.innerHTML = '';
   if (!Array.isArray(list) || !list.length) {
@@ -322,7 +256,7 @@ function renderClassOptions(list) {
 function loadClassList() {
   const apiUrl = resolveCheckReviewPeriodsApiUrl();
   fetch(`${apiUrl}?class_list=1`)
-    .then(parseJsonResponse)
+    .then(r => r.json())
     .then(list => {
       renderClassOptions(list);
     })
@@ -342,21 +276,11 @@ function setClassSelections(values, triggerLoad = false) {
     ? values.map(String).filter(Boolean)
     : (values ? [String(values)] : []);
   const primaryInput = document.getElementById('class_primary');
-  
-  // 如果是班導，classSelect 是 input 元素，只需要更新 class_primary
-  if (!select || select.tagName !== 'SELECT') {
-    if (primaryInput) {
-      primaryInput.value = arr.join(',');
-    }
+  if (primaryInput) primaryInput.value = arr[0] || '';
+  if (!select) {
     pendingClassValue = arr[0] || '';
-    if (triggerLoad) {
-      loadTeamList(getSelectedCohortValues(), arr);
-    }
     return;
   }
-  
-  // 正常情況：更新 select 元素
-  if (primaryInput) primaryInput.value = arr[0] || '';
   Array.from(select.options).forEach(option => {
     option.selected = arr.includes(option.value);
   });
@@ -366,26 +290,9 @@ function setClassSelections(values, triggerLoad = false) {
 }
 
 function getSelectedClassValues() {
-  const classSelect = document.getElementById('classSelect');
-  const classPrimary = document.getElementById('class_primary');
-  
-  // 如果 classSelect 不存在，或者不是 select 元素（班導的情況），使用 class_primary 的值
-  if (!classSelect || classSelect.tagName !== 'SELECT') {
-    if (classPrimary && classPrimary.value) {
-      const classIds = classPrimary.value.split(',').filter(Boolean);
-      return classIds;
-    }
-    return [];
-  }
-  
-  // 如果是隱藏的 select（不應該發生，但為了安全起見）
-  if (classSelect.offsetParent === null && classPrimary && classPrimary.value) {
-    const classIds = classPrimary.value.split(',').filter(Boolean);
-    return classIds;
-  }
-  
-  // 正常情況：從 select 元素獲取選中的值
-  return Array.from(classSelect.selectedOptions)
+  const select = document.getElementById('classSelect');
+  if (!select) return [];
+  return Array.from(select.selectedOptions)
     .map(option => option.value)
     .filter(Boolean);
 }
@@ -424,7 +331,7 @@ function parseTeamAssignmentPayload(raw) {
 function loadCohortList() {
   const apiUrl = resolveCheckReviewPeriodsApiUrl();
   fetch(`${apiUrl}?cohort_list=1`)
-      .then(parseJsonResponse)
+      .then(r => r.json())
       .then(list => {
           renderCohortOptions(list);
           const presetValues = (document.getElementById('cohort_values')?.value || '')
@@ -483,7 +390,7 @@ function loadTeamList(cohortId, classId, preselectTeams) {
   teamPickerState.summaryMessage = '載入團隊中...';
   updateTeamSummaryDisplay();
   fetch(`${apiUrl}?${params.toString()}`)
-    .then(parseJsonResponse)
+    .then(r => r.json())
     .then(list => {
       teamPickerState.list = Array.isArray(list) ? list : [];
       if (!teamPickerState.list.length) {
@@ -663,104 +570,6 @@ function setupStatusToggleDelegation() {
   });
 }
 
-function setupDeleteDelegation() {
-  const container = document.getElementById('periodTable');
-  if (!container || container.dataset.deleteBound === 'true') return;
-  container.dataset.deleteBound = 'true';
-  container.addEventListener('submit', (event) => {
-    const form = event.target;
-    if (!(form instanceof HTMLFormElement)) return;
-    if (form.dataset.role !== 'delete') return;
-    event.preventDefault();
-    const idInput = form.querySelector('input[name="period_ID"]');
-    if (!idInput || !idInput.value) return;
-    if (window.Swal) {
-      Swal.fire({
-        title: '確定刪除？',
-        icon: 'warning',
-        reverseButtons: true,
-        showCancelButton: true,
-        confirmButtonText: '刪除',
-        cancelButtonText: '取消',
-        confirmButtonColor: '#dc3545',
-        cancelButtonColor: '#6c757d'
-      }).then(result => {
-        if (result.isConfirmed) {
-          handleDeleteFormSubmit(form);
-        }
-      });
-    } else {
-      if (window.confirm('確定刪除？')) {
-        handleDeleteFormSubmit(form);
-      }
-    }
-  });
-}
-
-async function handleDeleteFormSubmit(form) {
-  const apiUrl = resolveCheckReviewPeriodsApiUrl();
-  const formData = new FormData(form);
-  if (!formData.get('action')) {
-    formData.set('action', 'delete');
-  }
-  const submitBtn = form.querySelector('button[type="submit"]');
-  if (submitBtn) {
-    submitBtn.disabled = true;
-    submitBtn.classList.add('loading');
-  }
-  try {
-    const res = await fetch(apiUrl, {
-      method: 'POST',
-      credentials: 'same-origin',
-      headers: { 'X-Requested-With': 'XMLHttpRequest' },
-      body: formData
-    });
-    const result = await parseJsonResponse(res);
-    if (!res.ok || !result.success) {
-      throw new Error(result?.msg || '刪除失敗');
-    }
-    const deletedId = formData.get('period_ID');
-    if (deletedId && document.getElementById('period_ID')?.value === deletedId) {
-      resetForm();
-    }
-    await loadPeriodTable();
-    if (window.Swal) {
-      Swal.fire({
-        title: '已刪除',
-        icon: 'success',
-        timer: 1500,
-        showConfirmButton: false
-      });
-    }
-  } catch (err) {
-    console.error('刪除失敗:', err);
-    if (window.Swal) {
-      Swal.fire('錯誤', err.message || '刪除失敗', 'error');
-    } else {
-      alert(err.message || '刪除失敗');
-    }
-  } finally {
-    if (submitBtn) {
-      submitBtn.disabled = false;
-      submitBtn.classList.remove('loading');
-    }
-  }
-}
-
-function setupPaginationDelegation() {
-  const container = document.getElementById('periodTable');
-  if (!container || container.dataset.paginationBound === 'true') return;
-  container.dataset.paginationBound = 'true';
-  container.addEventListener('click', (event) => {
-    const trigger = event.target.closest('[data-page]');
-    if (!trigger || !container.contains(trigger)) return;
-    const page = parseInt(trigger.dataset.page, 10);
-    if (!page || page === periodTableState.page) return;
-    event.preventDefault();
-    loadPeriodTable(page);
-  });
-}
-
 function handleStatusToggleClick(button) {
   const periodId = button.dataset.periodId;
   const nextStatus = button.dataset.nextStatus === '1' ? 1 : 0;
@@ -785,7 +594,7 @@ async function togglePeriodStatus(periodId, nextStatus, button) {
       headers: { 'X-Requested-With': 'XMLHttpRequest' },
       body: formData
     });
-    const result = await parseJsonResponse(res);
+    const result = await res.json();
     if (!res.ok || !result.success) {
       throw new Error(result?.msg || '切換失敗');
     }
@@ -828,15 +637,6 @@ function updateModalLayout() {
     toggleBtn.classList.toggle('d-none', !isCross);
     toggleBtn.textContent = isDual ? '回到僅指定團隊' : '指定被評分團隊';
   }
-  
-  // 更新被評分團隊欄位的顯示狀態
-  // 只有在 cross 模式、dualMode 為 true，且有被評分團隊內容時才顯示
-  const receiveField = document.getElementById('receiveTeamField');
-  if (receiveField) {
-    const hasReceiveContent = Array.isArray(teamPickerState.receiveIds) && teamPickerState.receiveIds.length > 0;
-    receiveField.classList.toggle('d-none', !isDual || !hasReceiveContent);
-  }
-  
   updateMirrorButtonState();
 }
 
@@ -856,9 +656,7 @@ function applyTeamPickerMode(mode) {
   }
 
   if (receiveField) {
-    // 只有在 cross 模式、dualMode 為 true，且有被評分團隊內容時才顯示被評分團隊欄位
-    const hasReceiveContent = Array.isArray(teamPickerState.receiveIds) && teamPickerState.receiveIds.length > 0;
-    receiveField.classList.toggle('d-none', mode !== 'cross' || !teamPickerState.dualMode || !hasReceiveContent);
+    receiveField.classList.toggle('d-none', mode !== 'cross');
   }
   if (receiveTrigger) {
     receiveTrigger.setAttribute('aria-disabled', mode === 'cross' ? 'false' : 'true');
@@ -923,14 +721,6 @@ function updateTeamSummaryDisplay() {
     role: 'receive',
     disabledText: '僅團隊間互評可設定'
   });
-  
-  // 更新被評分團隊欄位的顯示狀態：沒有內容時隱藏
-  const receiveField = document.getElementById('receiveTeamField');
-  if (receiveField) {
-    const hasReceiveContent = Array.isArray(teamPickerState.receiveIds) && teamPickerState.receiveIds.length > 0;
-    const shouldShow = teamPickerState.mode === 'cross' && teamPickerState.dualMode && hasReceiveContent;
-    receiveField.classList.toggle('d-none', !shouldShow);
-  }
 }
 
 function renderPickerDisplay(config) {
@@ -1188,35 +978,15 @@ function syncTeamHiddenValue() {
 }
 
 /* 載入資料表 */
-function loadPeriodTable(page) {
+function loadPeriodTable() {
   const apiUrl = resolveCheckReviewPeriodsApiUrl();
-  const urlParams = new URLSearchParams(window.location.search);
-  const sort = urlParams.get("sort") || "created";
-  const currentPage = Number.isInteger(page) ? page : (periodTableState.page || 1);
-  periodTableState.page = currentPage;
-  urlParams.set('sort', sort);
-  urlParams.set('page', currentPage);
-  return fetch(`${apiUrl}?${urlParams.toString()}`)
+  const sort = new URLSearchParams(window.location.search).get("sort") || "created";
+  return fetch(`${apiUrl}?sort=${sort}`)
       .then(r => r.text())
       .then(html => {
           const container = document.getElementById("periodTable");
           if (container) {
             container.innerHTML = html;
-            delete container.dataset.statusToggleBound;
-            delete container.dataset.deleteBound;
-            delete container.dataset.paginationBound;
-            const paginationMeta = container.querySelector('.period-pagination');
-            if (paginationMeta && paginationMeta.dataset.periodPage) {
-              const serverPage = parseInt(paginationMeta.dataset.periodPage, 10);
-              if (serverPage) {
-                periodTableState.page = serverPage;
-              }
-            } else if (!page) {
-              periodTableState.page = 1;
-            }
-            setupStatusToggleDelegation();
-            setupDeleteDelegation();
-            setupPaginationDelegation();
           }
       })
       .catch(err => {
@@ -1230,33 +1000,16 @@ function loadPeriodTable(page) {
 function editRow(row) {
   document.getElementById('form_action').value = 'update';
   document.getElementById('submitBtn').innerText = '更新';
-  
-  // 顯示取消編輯按鈕
-  const cancelEditBtn = document.getElementById('cancelEditBtn');
-  if (cancelEditBtn) {
-    cancelEditBtn.classList.remove('d-none');
-  }
 
   document.getElementById('period_ID').value = row.period_ID || '';
   document.getElementById('period_start_d').value = row.period_start_d || '';
   document.getElementById('period_end_d').value = row.period_end_d || '';
   document.getElementById('period_title').value = row.period_title || '';
-  const selectedCohort = Array.isArray(row._cohort_ids) && row._cohort_ids.length
-    ? row._cohort_ids.map(String)
-    : (row.cohort_ID ? [String(row.cohort_ID)] : []);
+  const selectedCohort = row.cohort_ID ? [String(row.cohort_ID)] : [];
   setSelectedCohorts(selectedCohort, false);
-  const selectedClass = Array.isArray(row._class_ids) && row._class_ids.length
-    ? row._class_ids.map(String)
-    : (row.pe_class_ID ? [String(row.pe_class_ID)] : []);
+  const selectedClass = row.pe_class_ID ? [String(row.pe_class_ID)] : [];
   setClassSelections(selectedClass, false);
-  const selectionPayload = {
-    assign: Array.isArray(row._team_assign_ids) && row._team_assign_ids.length
-      ? row._team_assign_ids.map(String)
-      : (parseTeamAssignmentPayload(row.pe_target_ID).assign || []),
-    receive: Array.isArray(row._team_receive_ids) && row._team_receive_ids.length
-      ? row._team_receive_ids.map(String)
-      : (parseTeamAssignmentPayload(row.pe_target_ID).receive || [])
-  };
+  const selectionPayload = parseTeamAssignmentPayload(row.pe_target_ID);
   const assignList = selectionPayload.assign || [];
   const receiveList = selectionPayload.receive || [];
   setTeamSelections(assignList, {
@@ -1270,20 +1023,11 @@ function editRow(row) {
     forceAllLabel: !receiveList.length
   });
   teamPickerState.dualMode = receiveList.length > 0;
-  // 如果有被評分團隊資料，顯示被評分團隊欄位
-  const receiveField = document.getElementById('receiveTeamField');
-  if (receiveField) {
-    const hasReceiveContent = receiveList.length > 0;
-    if (teamPickerState.dualMode && teamPickerState.mode === 'cross' && hasReceiveContent) {
-      receiveField.classList.remove('d-none');
-    } else {
-      receiveField.classList.add('d-none');
-    }
-  }
   // 載入對應屆別的團隊，預選現有值
   loadTeamList(selectedCohort, selectedClass, selectionPayload);
   const statusInput = document.getElementById('pe_status');
-  if (statusInput) statusInput.value = row.pe_status == 1 ? '1' : '0';
+  const statusValue = Number(row.pe_status ?? row.status_ID ?? 0);
+  if (statusInput) statusInput.value = statusValue === 1 ? '1' : '0';
 
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
@@ -1304,30 +1048,11 @@ function resetForm() {
   teamPickerState.dualMode = false;
   setTeamSelections([], { role: 'assign', keepMessage: true });
   setTeamSelections([], { role: 'receive', keepMessage: true });
-  // 隱藏被評分團隊欄位
-  const receiveField = document.getElementById('receiveTeamField');
-  if (receiveField) {
-    receiveField.classList.add('d-none');
-  }
   const statusInput = document.getElementById('pe_status');
   if (statusInput) statusInput.value = '1';
-  
-  // 隱藏取消編輯按鈕
-  const cancelEditBtn = document.getElementById('cancelEditBtn');
-  if (cancelEditBtn) {
-    cancelEditBtn.classList.add('d-none');
-  }
-}
-
-/* 取消編輯 */
-function cancelEdit() {
-  resetForm();
-  // 滾動到頂部
-  window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
 window.editRow = editRow;
 window.resetForm = resetForm;
-window.cancelEdit = cancelEdit;
 
 })();
