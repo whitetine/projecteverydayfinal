@@ -66,6 +66,8 @@ if (!isset($_SESSION['u_ID'])) {
       <i class="fa-solid fa-star"></i><span>基本需求</span></a>
     <a class="nav-link ajax-link" href="pages/type.php">
       <i class="fa-solid fa-star"></i><span>分類管理</span></a>
+          <a class="nav-link ajax-link" href="pages/history_project.php">
+      <i class="fa-solid fa-eye"></i><span>歷屆專題管理</span></a>
   <?php elseif ($role_ID == 6): ?>
     <a class="nav-link ajax-link" href="pages/team_apply.php">
       <i class="fa-solid fa-file-signature"></i><span>專題申請</span>
@@ -81,6 +83,8 @@ if (!isset($_SESSION['u_ID'])) {
     <a class="nav-link ajax-link" href="pages/task.php">
       <i class="fa-solid fa-file-arrow-up"></i><span>專題需求牆</span>
     </a>
+
+
   <?php elseif ($role_ID == 4): ?>
     <a class="nav-link ajax-link" href="pages/checkreviewperiods.php">
       <i class="fa-solid fa-eye"></i><span>評分時段管理</span></a>
@@ -94,8 +98,7 @@ if (!isset($_SESSION['u_ID'])) {
       <i class="fa-solid fa-file-pen"></i><span>查看工作日誌</span></a>
     <a class="nav-link ajax-link" href="pages/teacher_task&req.php">
       <i class="fa-solid fa-eye"></i><span>專題需求牆</span></a>
-    <a class="nav-link ajax-link" href="pages/history_project.php">
-      <i class="fa-solid fa-eye"></i><span>歷屆專題管理</span></a>
+
 
   <?php elseif ($role_ID == 3): ?>
     <a class="nav-link ajax-link" href="pages/checkreviewperiods.php">
