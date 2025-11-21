@@ -55,8 +55,6 @@
                                 </span>
                             </td>
                             <td>
-                                <input type="button" value="編輯" @click="type_edit_modal(key)"
-                                    class="btn btn-primary">&emsp;
                                 <button @click="type_stop(i.type_ID,0)" class="btn btn-danger" v-if="i.type_status==1"><i
                                         class="fa-solid fa-toggle-off me-2"></i>停用</button>
                                 <button @click="type_stop(i.type_ID,1)" class="btn btn-success" v-else><i

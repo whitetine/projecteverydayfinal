@@ -17,12 +17,11 @@ session_start();
 <div id="req_app" class="container my-4">
     <div class="page-header">
         <h1 class="page-title">
-            <i class="fa-solid fa-layer-group me-2" style="color: #ffc107;"></i>基本需求管理//多選操作,頁碼,屆別篩選 還沒做
+            <i class="fa-solid fa-layer-group me-2" style="color: #ffc107;"></i>基本需求管理//多選操作,頁碼 還沒做
         </h1>
     </div>
     <button @click="new_progress_all_show" class="btn btn-primary">新增科上基本需求</button>
     <br><br>
-
     <!-- 搜尋和篩選區 --><!-- T1114抓整合過的 只改文字 -->
     <div class="card mb-4 shadow-sm filter-card">
         <div class="card-header filter-header">
@@ -37,7 +36,7 @@ session_start();
                     <input type="text" class="form-control" v-model="searchText" placeholder="輸入標題名稱..."
                         @input="filter_change_req">
                 </div>
-                <div class="col-md-3">
+                <div class="col-md-2">
                     <label class="form-label">
                         <i class="fa-solid fa-toggle-on me-2"></i>狀態
                     </label>
@@ -47,13 +46,22 @@ session_start();
                         <option value="0">停用</option>
                     </select>
                 </div>
-                <div class="col-md-3">
+                <div class="col-md-2">
                     <label class="form-label">
                         <i class="fa-solid fa-star me-2"></i>類組篩選
                     </label>
                     <select class="form-select" v-model="searchGroup" @change="filter_change_req">
                         <option value="">全部</option>
                         <option :value="i.group_ID" v-for="i in group">{{i.group_name}}</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">
+                        <i class="fa-solid fa-star me-2"></i>屆別篩選
+                    </label>
+                    <select class="form-select" v-model="searchCohort" @change="filter_change_req">
+                        <option value="">全部</option>
+                        <option :value="i.cohort_ID" v-for="i in cohort">{{i.year_label}}</option>
                     </select>
                 </div>
                 <div class="col-md-2 d-flex align-items-end">
@@ -74,6 +82,29 @@ session_start();
             </h5>
             <span class="badge-count">共 {{this.filter_allreq.length}} 筆</span>
         </div>
+        <div class="form-check user-select-checkbox" v-if="!tableORcard">
+            <input class="form-check-input" type="checkbox" id="select_all_req" :checked="isAllSelected"
+                @change="toggleSelectAll($event)">
+            <label class="form-check-label" for="select_all_req">
+                全選
+            </label>
+        </div>
+        <!-- ✅ 批次操作列：只有在有勾選時才出現 -->
+        <div class="card-body py-2" v-if="selectedReqIDs.length > 0">
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+                <span>已選 {{ selectedReqIDs.length }} 筆</span>
+                <button class="btn btn-sm btn-success" @click="bulkChangeStatus(1)">
+                    批次啟用
+                </button>
+                <button class="btn btn-sm btn-danger" @click="bulkChangeStatus(0)">
+                    批次停用
+                </button>
+                <button class="btn btn-sm btn-outline-secondary" @click="clearSelection">
+                    清除選取
+                </button>
+            </div>
+        </div>
+
         <!-- 小卡顯示，若v-if不成立，該區塊不會載入 -->
         <div class="user-card-grid" style="margin-top: 20px;">
             <div class="user-card" style="cursor: pointer;" v-if="!tableORcard" v-for="(i,key) in filter_allreq">
@@ -127,14 +158,18 @@ session_start();
                     </div>
                 </div>
                 <div class="user-actions">
-                    <div class="form-check user-select-checkbox">
-                        <input class="form-check-input user-checkbox" type="checkbox"
-                            value="<?= htmlspecialchars($user['u_ID']) ?>"
-                            id="user_<?= htmlspecialchars($user['u_ID']) ?>">
-                        <label class="form-check-label" for="user_<?= htmlspecialchars($user['u_ID']) ?>">
-                            選擇
-                        </label>
-                    </div>
+                    <td>
+                        <div class="form-check user-select-checkbox">
+                            <input class="form-check-input user-checkbox" type="checkbox" :id="'req_table_' + i.req_ID"
+                                :value="i.req_ID" v-model="selectedReqIDs">
+                            <label class="form-check-label" :for="'req_table_' + i.req_ID">
+                                選擇
+                            </label>
+                        </div>
+                    </td>
+
+
+
                     <button @click="req_edit_modal(key)" class="btn btn-primary"><i
                             class="fa-solid fa-pen-to-square me-2"></i>編輯</button>
                     <button @click="req_del(i.req_ID,0)" class="btn btn-danger" v-if="i.req_status==1"><i
@@ -152,6 +187,15 @@ session_start();
                 <table class="groups-table">
                     <thead>
                         <tr>
+                            <th>
+                                <div class="form-check user-select-checkbox">
+                                    <input class="form-check-input" type="checkbox" id="select_all_req"
+                                        :checked="isAllSelected" @change="toggleSelectAll($event)">
+                                    <label class="form-check-label" for="select_all_req">
+                                        全選
+                                    </label>
+                                </div>
+                            </th>
                             <th>屆別</th>
                             <th>標題</th>
                             <th>說明</th>
@@ -169,6 +213,15 @@ session_start();
                     </thead>
                     <tbody>
                         <tr v-for="(i,key) in filter_allreq">
+                            <td>
+                                <div class="form-check user-select-checkbox">
+                                    <input class="form-check-input user-checkbox" type="checkbox"
+                                        :id="'req_table_' + i.req_ID" :value="i.req_ID" v-model="selectedReqIDs">
+                                    <label class="form-check-label" :for="'req_table_' + i.req_ID">
+                                        選擇
+                                    </label>
+                                </div>
+                            </td>
                             <td>{{i.cohort_name}}</td>
                             <td>{{i.req_title}}</td>
                             <td>{{i.req_direction}}</td>
@@ -407,10 +460,22 @@ session_start();
                     statusFilter: "",
                     searchText: "",
                     searchGroup: "",
+                    searchCohort: "",
                     tableORcard: true,
                     isPressed: false,
+                    selectedReqIDs: [],   // 存被勾選的 req_ID
                 }
             },
+            computed: {
+                // ✅ 判斷目前畫面上的是否都被選取
+                isAllSelected() {
+                    return (
+                        this.filter_allreq.length > 0 &&
+                        this.filter_allreq.every(item => this.selectedReqIDs.includes(item.req_ID))
+                    );
+                },
+            },
+
             methods: {
                 get_req_ch() {
                     $.post("../modules/requirement.php?do=get_req_ch", item => {
@@ -521,6 +586,7 @@ session_start();
                     this.statusFilter = ""
                     this.searchText = ""
                     this.searchGroup = ""
+                    this.searchCohort = ""
                     this.filter_allreq = this.allreq
                 },
                 filter_change_req() {
@@ -535,7 +601,46 @@ session_start();
                         (this.filter_allreq = this.filter_allreq.filter(
                             item => item.group_ID == this.searchGroup
                         ))
-                }
+                    this.searchCohort != "" &&
+                        (this.filter_allreq = this.filter_allreq.filter(
+                            item => item.cohort_ID == this.searchCohort
+                        ))
+                },
+                toggleSelectAll(event) {
+                    const checked = event.target.checked;
+                    if (checked) {
+                        // 把目前畫面上所有 req_ID 都塞進 selectedReqIDs（避免重複）
+                        const idsOnPage = this.filter_allreq.map(item => item.req_ID);
+                        this.selectedReqIDs = Array.from(new Set([...this.selectedReqIDs, ...idsOnPage]));
+                    } else {
+                        // 把目前畫面上的 req_ID 從 selectedReqIDs 移除
+                        const idsOnPage = this.filter_allreq.map(item => item.req_ID);
+                        this.selectedReqIDs = this.selectedReqIDs.filter(id => !idsOnPage.includes(id));
+                    }
+                },
+
+                // ✅ 批次修改狀態（0=停用, 1=啟用）
+                bulkChangeStatus(number) {
+                    if (this.selectedReqIDs.length === 0) {
+                        toast({ type: 'info', title: '尚未選取資料' });
+                        return;
+                    }
+                    // 簡單一點：前端一個一個呼叫原本的 req_del
+                    this.selectedReqIDs.forEach(id => {
+                        $.post("../modules/requirement.php?do=req_del", { ID: id, number: number })
+                            .done(() => {
+                                // 重新載入 + 清空勾選
+                                this.get_req_ch();
+                            })
+                    })
+                    this.selectedReqIDs = [];
+                    toast({ type: 'success', title: '批次更新完成' });
+                },
+
+                // ✅ 清空目前所有勾選
+                clearSelection() {
+                    this.selectedReqIDs = [];
+                },
             },
             mounted() {
                 this.get_req_ch()

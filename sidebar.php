@@ -52,8 +52,8 @@ if (!isset($_SESSION['u_ID'])) {
     <a class="nav-link ajax-link" href="pages/checkreviewperiods.php">
       <i class="fa-solid fa-eye"></i><span>評分時段管理</span></a>
 
-    <a class="nav-link ajax-link" href="pages/teacher_review_detail.php">
-      <i class="fa-solid fa-file-pen"></i><span>互評(detail)</span></a>
+    <!-- <a class="nav-link ajax-link" href="pages/teacher_review_detail.php">
+      <i class="fa-solid fa-file-pen"></i><span>互評(detail)</span></a> -->
 
     <a class="nav-link ajax-link" href="pages/teacher_review_status.php">
       <i class="fa-solid fa-file-pen"></i><span>互評(status)</span></a>
@@ -94,6 +94,8 @@ if (!isset($_SESSION['u_ID'])) {
       <i class="fa-solid fa-file-pen"></i><span>查看工作日誌</span></a>
     <a class="nav-link ajax-link" href="pages/teacher_task&req.php">
       <i class="fa-solid fa-eye"></i><span>專題需求牆</span></a>
+    <a class="nav-link ajax-link" href="pages/history_project.php">
+      <i class="fa-solid fa-eye"></i><span>歷屆專題管理</span></a>
 
   <?php elseif ($role_ID == 3): ?>
     <a class="nav-link ajax-link" href="pages/checkreviewperiods.php">

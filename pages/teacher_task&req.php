@@ -1,6 +1,35 @@
 <link rel="stylesheet" href="css/group_manage.css?v=<?= time() ?>">
 <link rel="stylesheet" href="css/task.css?v=<?= time() ?>">
 <?php session_start(); ?>
+<style>
+    .filter_row {
+    display: flex;
+    align-items: flex-end; /* 讓 Select 與 成員文字的底對齊 */
+    gap: 24px;
+    margin-bottom: 16px;
+}
+
+.team-select,
+.team-members {
+    display: flex;
+    flex-direction: column;
+}
+
+.team-select-input {
+    font-size: 18px;
+    width: 300px; /* 不用撐到 50%，看起來更剛好 */
+}
+
+.team-members-list {
+    font-size: 18px;
+    background: #f7f7f7;
+    padding: 8px 12px;
+    border-radius: 6px;
+    border: 1px solid #ddd;
+    min-width: 200px;
+}
+
+</style>
 <div class="group-management-container" id="task_app">
     <div class="page-header">
         <h1 class="page-title">
@@ -10,13 +39,25 @@
         **分頁
         **查看相關連結里程碑、任務
     </div>
-    <div class="req-filter-row">
-        <select class="form-select" style="font-size: 18px;width:50%" v-model="now_team_ID"
-            @change="get_task(),get_requirement()">
-            <option :value="i.team_ID" v-for="i in all_team_ID">{{i.team_project_name}}</option>
-        </select>
-        <h2>成員：{{ teamMembers.map(m => m.u_name).join('、') }}</h2>
+    <div class="filter_row">
+        <div class="team-select">
+            <label class="form-label">選擇小組</label>
+            <select class="form-select team-select-input" v-model="now_team_ID"
+                @change="get_task(); get_requirement();">
+                <option :value="i.team_ID" v-for="i in all_team_ID">
+                    {{ i.team_project_name }}
+                </option>
+            </select>
+        </div>
+
+        <div class="team-members">
+            <label class="form-label">成員</label>
+            <div class="team-members-list">
+                {{ teamMembers.map(m => m.u_name).join('、') }}
+            </div>
+        </div>
     </div>
+
     <!-- 專題需求牆內容顯示小卡 -->
     <div id="req_wall" class="req-wall">
         <div class="req-board">
@@ -41,7 +82,7 @@
                     @click="filter.requirement_status = 'return'">被退件</button>
 
                 <button class="req-filter-btn" :class="{ active: filter.requirement_status === 'done' }"
-                    @click="filter.requirement_status = 'done'">已完成</button>
+                    @click="filter.requirement_status = 'done'">已通過</button>
             </div>
             <div class="req-card-list">
                 <!-- 單張需求卡片 -->
@@ -53,10 +94,10 @@
                             <h3 class="req-card-title">
                                 {{ item.req_title }}
                             </h3>
-                            <span class="req-count-tag" v-if="item.status==0">未回報</span>
-                            <span class="req-count-tag" v-if="item.status==1">審核中</span>
-                            <span class="req-count-tag" v-if="item.status==2">被退件</span>
-                            <span class="req-count-tag" v-if="item.status==3">已通過</span>
+                            <span class="req-count-tag" class="" v-if="item.status==0">未回報</span>
+                            <span class="req-count-tag" v-if="item.status==1" style="background:#F8BF63">審核中</span>
+                            <span class="req-count-tag" v-if="item.status==2" style="background:#FF775C">被退件</span>
+                            <span class="req-count-tag" v-if="item.status==3" style="background:#CAFCBB">已通過</span>
                         </div>
                         <p class="req-direction">
                             {{ item.req_direction }}
@@ -328,7 +369,8 @@
                     </div>
                     <div class="modal-footer" v-if="now_requirement.status==1">
                         <!-- v-if="!req_return" -->
-                        <button class="btn btn-danger" @click="req_return_click(2)" style="margin-right: 14px;">退件</button>
+                        <button class="btn btn-danger" @click="req_return_click(2)"
+                            style="margin-right: 14px;">退件</button>
                         <button class="btn btn-primary" @click="req_return_click(3)">通過</button>
                     </div>
                     <!-- <div class="modal-footer" v-else>
@@ -505,7 +547,7 @@
                     $('#req_look_modal').modal('hide')
                 },
                 req_return_click(type) {
-                    $.post("../modules/teacher_task&req.php?do=req_return_click", { now_team_ID: this.now_team_ID, req_ID: this.now_requirement.req_ID,status:type })
+                    $.post("../modules/teacher_task&req.php?do=req_return_click", { now_team_ID: this.now_team_ID, req_ID: this.now_requirement.req_ID, status: type })
                         .done(() => {
                             toast({ type: 'success', title: '已成功通過' })
                             $('#req_look_modal').modal('hide')

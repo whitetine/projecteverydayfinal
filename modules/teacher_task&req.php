@@ -44,8 +44,5 @@ switch ($_GET["do"]) {
     case "req_return_click":
         query("UPDATE `reprogressdata` SET `rp_status` = '{$p["status"]}' WHERE `reprogressdata`.`req_ID` = {$p["req_ID"]};");
         break;
-
-
-
 }
 ?>
