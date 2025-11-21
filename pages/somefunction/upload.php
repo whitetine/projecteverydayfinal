@@ -55,13 +55,14 @@ try {
     }
 
 
- $sql = "
-        INSERT INTO applydata
-          ( file_ID,  apply_a_u_ID, apply_other, apply_url, apply_status, apply_created_d)
+ // 插入 docsubdata 表（根據資料表結構）
+    $sql = "
+        INSERT INTO docsubdata
+          (doc_ID, dcsub_team_ID, dcsub_u_ID, dcsub_comment, dcsub_url, dcsub_sub_d, dc_approved_u_ID, dcsub_approved_d, dcsub_remark, dcsub_status)
         VALUES
-          (?, ?, ?, ?, 1, NOW())
+          (?, NULL, ?, ?, ?, NOW(), NULL, NULL, NULL, 0)
     ";
-    $stmt = $conn->prepare($sql); // ★ 用 $conn，不是 $pdo
+    $stmt = $conn->prepare($sql);
     $stmt->execute([$file_ID, $apply_user, $apply_other, $dbPath]);
     echo json_encode([
         "status"   => "success",
