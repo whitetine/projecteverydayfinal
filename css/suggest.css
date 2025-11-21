@@ -192,6 +192,9 @@
     color: #fff !important;
 }
 
+/* 編輯按鈕樣式 - 使用更高優先級選擇器確保覆蓋 Bootstrap */
+#content .suggest-wrapper .sg-btn-edit,
+.suggest-wrapper .sg-btn-edit,
 .sg-btn-edit {
     padding: 8px 18px !important;
     border-radius: 8px !important;
@@ -206,12 +209,18 @@
     text-decoration: none !important;
     display: inline-block !important;
 }
+#content .suggest-wrapper .sg-btn-edit:hover,
+.suggest-wrapper .sg-btn-edit:hover,
 .sg-btn-edit:hover {
     background: linear-gradient(135deg, #764ba2 0%, #667eea 100%) !important;
     transform: translateY(-2px) !important;
     box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4) !important;
     color: #fff !important;
 }
+#content .suggest-wrapper .sg-btn-edit:focus,
+#content .suggest-wrapper .sg-btn-edit:active,
+.suggest-wrapper .sg-btn-edit:focus,
+.suggest-wrapper .sg-btn-edit:active,
 .sg-btn-edit:focus,
 .sg-btn-edit:active {
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;

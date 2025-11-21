@@ -169,4 +169,3 @@ if ($currentRoleId === 3 && $currentUserId) {
 
 <link rel="stylesheet" href="css/checkreviewperiods.css">
 <script src="js/checkreviewperiods.js"></script>
-
