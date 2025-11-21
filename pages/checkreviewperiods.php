@@ -25,7 +25,7 @@ $sort = $_GET['sort'] ?? 'created';
       </li>
       </ul>
     </div>
-  <input type="hidden" id="mode_value" value="in">
+  <input type="hidden" id="mode_value" name="pe_mode" value="in">
   <small class="text-muted" id="modeHint">請選擇模式以查看說明</small>
   </div>
 

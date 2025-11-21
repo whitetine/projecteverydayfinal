@@ -252,15 +252,22 @@ function fetchPeriodTargetTeams(PDO $conn, array $periodIds) {
     $periodIds = array_values(array_unique(array_filter(array_map('intval', $periodIds))));
     if (!$periodIds) return [];
     $placeholders = implode(',', array_fill(0, count($periodIds), '?'));
-    $stmt = $conn->prepare("SELECT period_ID, pe_team_ID FROM petargetdata WHERE period_ID IN ($placeholders)");
+    $stmt = $conn->prepare("SELECT period_ID, pe_team_ID, pe_cohort_ID FROM petargetdata WHERE period_ID IN ($placeholders)");
     $stmt->execute($periodIds);
     $map = [];
     foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
         $pid = (int)$row['period_ID'];
-        if (!isset($map[$pid])) $map[$pid] = [];
-        $teamId = $row['pe_team_ID'];
-        if ($teamId !== null) {
-            $map[$pid][] = (int)$teamId;
+        if (!isset($map[$pid])) {
+            $map[$pid] = [
+                'team_ids' => [],
+                'cohort_ids' => []
+            ];
+        }
+        if (isset($row['pe_team_ID']) && $row['pe_team_ID'] !== null) {
+            $map[$pid]['team_ids'][] = (int)$row['pe_team_ID'];
+        }
+        if (isset($row['pe_cohort_ID']) && $row['pe_cohort_ID'] !== null) {
+            $map[$pid]['cohort_ids'][] = (int)$row['pe_cohort_ID'];
         }
     }
     return $map;
@@ -327,7 +334,7 @@ function describeTeamSelection(array $payload, string $role, array $teamNameMap)
     }
     $ids = $payload[$role] ?? [];
     if (!$ids || !count($ids)) {
-        return $role === 'receive' ? 'ALL' : '－';
+        return $role === 'receive' ? '－' : '－';
     }
     $labels = [];
     foreach ($ids as $id) {
@@ -362,6 +369,11 @@ function resolvePostedClassId() {
     return ($raw === '' ? null : $raw);
 }
 
+function resolvePostedMode() {
+    $raw = strtolower(trim($_POST['pe_mode'] ?? $_POST['mode_value'] ?? ''));
+    return $raw === 'cross' ? 'cross' : 'in';
+}
+
 $periodStatusColumn = getPeriodStatusColumn($conn);
 
 /* 排序 */
@@ -386,6 +398,7 @@ if (($_POST['action'] ?? '') === 'create') {
     $hasPeTargetId = false;
     $hasPeRoleId = false;
     $hasPeClassId = false;
+    $hasPeMode = false;
     try {
         $checkStmt = $conn->query("SHOW COLUMNS FROM perioddata");
         $columns = $checkStmt->fetchAll(PDO::FETCH_COLUMN);
@@ -393,6 +406,7 @@ if (($_POST['action'] ?? '') === 'create') {
         $hasPeTargetId = in_array('pe_target_ID', $columns);
         $hasPeRoleId = in_array('pe_role_ID', $columns);
         $hasPeClassId = in_array('pe_class_ID', $columns);
+        $hasPeMode = in_array('pe_mode', $columns);
     } catch (Exception $e) {
         // 如果檢查失敗，使用預設值
     }
@@ -407,9 +421,12 @@ if (($_POST['action'] ?? '') === 'create') {
     $placeholders = ['?', '?', '?'];
 
     if ($hasPeTargetId) {
-        $fields[] = 'pe_target_ID';
-        $values[] = $_POST['pe_target_ID'] ?? null;
-        $placeholders[] = '?';
+        $rawTarget = $_POST['pe_target_ID'] ?? null;
+        if ($rawTarget !== null) {
+            $fields[] = 'pe_target_ID';
+            $values[] = $rawTarget;
+            $placeholders[] = '?';
+        }
     }
     if ($hasCohortId) {
         $fields[] = 'cohort_ID';
@@ -432,6 +449,13 @@ if (($_POST['action'] ?? '') === 'create') {
     if ($hasPeRoleId) {
         $fields[] = 'pe_role_ID';
         $values[] = $_SESSION['role_ID'] ?? null;
+        $placeholders[] = '?';
+    }
+
+    $modeValue = resolvePostedMode();
+    if ($hasPeMode) {
+        $fields[] = 'pe_mode';
+        $values[] = $modeValue;
         $placeholders[] = '?';
     }
 
@@ -475,12 +499,14 @@ if (($_POST['action'] ?? '') === 'update') {
     $hasCohortId = false;
     $hasPeTargetId = false;
     $hasPeClassId = false;
+    $hasPeMode = false;
     try {
         $checkStmt = $conn->query("SHOW COLUMNS FROM perioddata");
         $columns = $checkStmt->fetchAll(PDO::FETCH_COLUMN);
         $hasCohortId = in_array('cohort_ID', $columns);
         $hasPeTargetId = in_array('pe_target_ID', $columns);
         $hasPeClassId = in_array('pe_class_ID', $columns);
+        $hasPeMode = in_array('pe_mode', $columns);
     } catch (Exception $e) {
         // 如果檢查失敗，使用預設值
     }
@@ -502,8 +528,11 @@ if (($_POST['action'] ?? '') === 'update') {
     ];
 
     if ($hasPeTargetId) {
-        $sets[] = 'pe_target_ID=?';
-        $values[] = $_POST['pe_target_ID'] ?? null;
+        $rawTarget = $_POST['pe_target_ID'] ?? null;
+        if ($rawTarget !== null) {
+            $sets[] = 'pe_target_ID=?';
+            $values[] = $rawTarget;
+        }
     }
     if ($hasCohortId) {
         $sets[] = 'cohort_ID=?';
@@ -512,6 +541,12 @@ if (($_POST['action'] ?? '') === 'update') {
     if ($hasPeClassId) {
         $sets[] = 'pe_class_ID=?';
         $values[] = ($classId = resolvePostedClassId()) !== null ? (int)$classId : null;
+    }
+
+    $modeValue = resolvePostedMode();
+    if ($hasPeMode) {
+        $sets[] = 'pe_mode=?';
+        $values[] = $modeValue;
     }
 
     if ($periodStatusColumn) {
@@ -702,43 +737,54 @@ try {
 } catch (Exception $e) {
     $hasPeTargetId = false;
 }
+$hasPeMode = false;
+try {
+    $checkStmtMode = $conn->query("SHOW COLUMNS FROM perioddata LIKE 'pe_mode'");
+    $hasPeMode = $checkStmtMode->rowCount() > 0;
+} catch (Exception $e) {
+    $hasPeMode = false;
+}
 
-if ($hasCohortId) {
-    // 如果有 cohort_ID 欄位，使用 JOIN
-    if ($hasPeTargetId) {
-        // 同時 JOIN 團隊資料（只當 pe_target_ID 不是 'ALL' 時）
-        $sql = "SELECT p.*, c.cohort_name, c.year_label, 
-                       CASE 
-                         WHEN p.pe_target_ID = 'ALL' THEN NULL
-                         ELSE t.team_project_name
-                       END as team_project_name
-                FROM perioddata p
-                LEFT JOIN cohortdata c ON p.cohort_ID = c.cohort_ID
-                LEFT JOIN teamdata t ON CAST(p.pe_target_ID AS CHAR) = CAST(t.team_ID AS CHAR) 
-                    AND p.pe_target_ID != 'ALL'
-                $orderBy";
+if ($hasCohortId || $hasPeMode) {
+    $selectedCols = ['p.*'];
+    if ($hasCohortId) {
+        $selectedCols[] = 'c.cohort_name';
+        $selectedCols[] = 'c.year_label';
     } else {
-        $sql = "SELECT p.*, c.cohort_name, c.year_label, 
-                       NULL as team_project_name
-                FROM perioddata p
-                LEFT JOIN cohortdata c ON p.cohort_ID = c.cohort_ID
-                $orderBy";
+        $selectedCols[] = 'NULL as cohort_name';
+        $selectedCols[] = 'NULL as year_label';
     }
+    if ($hasPeTargetId) {
+        $selectedCols[] = "CASE WHEN p.pe_target_ID = 'ALL' THEN NULL ELSE t.team_project_name END as team_project_name";
+    } else {
+        $selectedCols[] = 'NULL as team_project_name';
+    }
+    $selectedCols[] = $hasPeMode ? 'p.pe_mode as pe_mode' : "NULL as pe_mode";
+    $sql = "SELECT " . implode(', ', $selectedCols) . "
+            FROM perioddata p";
+    if ($hasCohortId) {
+        $sql .= " LEFT JOIN cohortdata c ON p.cohort_ID = c.cohort_ID";
+    }
+    if ($hasPeTargetId) {
+        $sql .= " LEFT JOIN teamdata t ON CAST(p.pe_target_ID AS CHAR) = CAST(t.team_ID AS CHAR) AND p.pe_target_ID != 'ALL'";
+    }
+    $sql .= " $orderBy";
 } else {
-    // 如果沒有 cohort_ID 欄位，只查詢 perioddata
     if ($hasPeTargetId) {
         $sql = "SELECT p.*, NULL as cohort_name, NULL as year_label,
                        CASE 
                          WHEN p.pe_target_ID = 'ALL' THEN NULL
                          ELSE t.team_project_name
-                       END as team_project_name
+                       END as team_project_name,
+                       " . ($hasPeMode ? 'p.pe_mode' : "NULL as pe_mode") . "
                 FROM perioddata p
                 LEFT JOIN teamdata t ON CAST(p.pe_target_ID AS CHAR) = CAST(t.team_ID AS CHAR) 
                     AND p.pe_target_ID != 'ALL'
                 $orderBy";
     } else {
         $sql = "SELECT p.*, NULL as cohort_name, NULL as year_label,
-                       NULL as team_project_name
+                       NULL as team_project_name,
+                       " . ($hasPeMode ? 'p.pe_mode' : "NULL as pe_mode") . "
                 FROM perioddata p
                 $orderBy";
     }
@@ -756,24 +802,23 @@ $periodTargetMap = fetchPeriodTargetTeams($conn, $periodIdList);
 
 $teamIdSet = [];
 foreach ($rows as &$rowItem) {
-    $payload = parseTeamTarget($rowItem['pe_target_ID'] ?? '');
-    $fallbackTargets = $periodTargetMap[(int)($rowItem['period_ID'] ?? 0)] ?? [];
+$payload = parseTeamTarget($rowItem['pe_target_ID'] ?? '');
+$rawMode = trim(strtolower($rowItem['mode'] ?? $rowItem['pe_mode'] ?? ''));
+    $targetInfo = $periodTargetMap[(int)($rowItem['period_ID'] ?? 0)] ?? ['team_ids' => [], 'cohort_ids' => []];
+    $fallbackTargets = $targetInfo['team_ids'] ?? [];
+    $cohortValues = array_unique(array_filter($targetInfo['cohort_ids'] ?? []));
+    $rowItem['cohort_values'] = implode(',', $cohortValues);
     
     // 判斷是否為團隊間互評：有 receive 欄位且不為空，或原始值是 JSON 格式
     $isCrossMode = !empty($payload['receive']);
     
     if ($fallbackTargets) {
         if ($isCrossMode) {
-            // 團隊間互評：petargetdata 只包含被評分團隊（receive）
-            // 如果 receive 為空或為 ALL，從 petargetdata 填充
             if (!$payload['receive'] || $payload['is_all']) {
                 $payload['receive'] = array_map('strval', $fallbackTargets);
                 $payload['is_all'] = false;
             }
-            // assign 保持原樣（從 pe_target_ID 的 JSON 中讀取，不從 petargetdata 填充）
         } else {
-            // 團隊內互評：指定團隊 = 被評分團隊
-            // 如果兩者都為空或為 ALL，從 petargetdata 填充（兩者相同）
             if ($payload['is_all'] || (!count($payload['assign']) && !count($payload['receive']))) {
                 $payload['assign'] = array_map('strval', $fallbackTargets);
                 $payload['receive'] = array_map('strval', $fallbackTargets);
@@ -781,7 +826,13 @@ foreach ($rows as &$rowItem) {
             }
         }
     }
-    
+    if (!empty($payload['assign']) || !empty($payload['receive'])) {
+        $rowItem['pe_target_ID'] = json_encode([
+            'assign' => $payload['assign'],
+            'receive' => $payload['receive']
+        ], JSON_UNESCAPED_UNICODE);
+    }
+$rowItem['mode'] = (!empty($payload['receive']) || $rawMode === 'cross') ? 'cross' : 'in';
     $rowItem['_team_payload'] = $payload;
     foreach (['assign', 'receive'] as $role) {
         foreach ($payload[$role] as $teamId) {

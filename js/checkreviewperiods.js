@@ -602,7 +602,10 @@ function applyTeamPickerMode(mode) {
   }
 
   if (receiveField) {
-    receiveField.classList.toggle('d-none', mode !== 'cross');
+    const shouldShow = mode === 'cross';
+    receiveField.classList.toggle('d-none', !shouldShow);
+    receiveField.hidden = !shouldShow;
+    receiveField.style.display = shouldShow ? '' : 'none';
   }
   if (receiveTrigger) {
     receiveTrigger.setAttribute('aria-disabled', mode === 'cross' ? 'false' : 'true');
@@ -944,14 +947,30 @@ function loadPeriodTable() {
 
 /* 編輯 */
 function editRow(row) {
+  const currentMode = row.mode || row.pe_mode || '';
   document.getElementById('form_action').value = 'update';
   document.getElementById('submitBtn').innerText = '更新';
 
   document.getElementById('period_ID').value = row.period_ID || '';
-  document.getElementById('period_start_d').value = row.period_start_d || '';
-  document.getElementById('period_end_d').value = row.period_end_d || '';
-  document.getElementById('period_title').value = row.period_title || '';
-  const selectedCohort = row.cohort_ID ? [String(row.cohort_ID)] : [];
+  const startInput = document.getElementById('period_start_d');
+  const endInput = document.getElementById('period_end_d');
+  const titleInput = document.getElementById('period_title');
+  if (startInput) {
+    startInput.value = (row.period_start_d || '').replace(' ', 'T');
+  }
+  if (endInput) {
+    endInput.value = (row.period_end_d || '').replace(' ', 'T');
+  }
+  if (titleInput) {
+    titleInput.value = row.period_title || '';
+  }
+  const cohortValuesInput = document.getElementById('cohort_values');
+  if (cohortValuesInput) {
+    cohortValuesInput.value = row.cohort_values || '';
+  }
+  const selectedCohort = row.cohort_ID
+    ? [String(row.cohort_ID)]
+    : (row.cohort_values ? row.cohort_values.split(',').filter(Boolean) : []);
   setSelectedCohorts(selectedCohort, false);
   const selectedClass = row.pe_class_ID ? [String(row.pe_class_ID)] : [];
   setClassSelections(selectedClass, false);
@@ -971,6 +990,17 @@ function editRow(row) {
   teamPickerState.dualMode = receiveList.length > 0;
   // 載入對應屆別的團隊，預選現有值
   loadTeamList(selectedCohort, selectedClass, selectionPayload);
+
+  if (currentMode) {
+    const hiddenModeInput = document.getElementById('mode_value');
+    if (hiddenModeInput) hiddenModeInput.value = currentMode;
+    applyTeamPickerMode(currentMode);
+    const labelEl = document.getElementById('modeLabel');
+    const targetBtn = document.querySelector(`.mode-option[data-mode="${currentMode}"]`);
+    if (labelEl && targetBtn) {
+      labelEl.textContent = targetBtn.textContent.trim();
+    }
+  }
   const statusInput = document.getElementById('pe_status');
   const statusValue = Number(row.pe_status ?? row.status_ID ?? 0);
   if (statusInput) statusInput.value = statusValue === 1 ? '1' : '0';
