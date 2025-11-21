@@ -589,7 +589,6 @@ function updateModalLayout() {
 function applyTeamPickerMode(mode) {
   teamPickerState.mode = mode;
   const trigger = document.getElementById('teamPickerTrigger');
-  const receiveField = document.getElementById('receiveTeamField');
   const receiveTrigger = document.getElementById('receivePickerTrigger');
   const receiveClear = document.getElementById('receivePickerClear');
 
@@ -601,12 +600,6 @@ function applyTeamPickerMode(mode) {
     trigger.style.cursor = isSelectable ? 'pointer' : 'not-allowed';
   }
 
-  if (receiveField) {
-    const shouldShow = mode === 'cross';
-    receiveField.classList.toggle('d-none', !shouldShow);
-    receiveField.hidden = !shouldShow;
-    receiveField.style.display = shouldShow ? '' : 'none';
-  }
   if (receiveTrigger) {
     receiveTrigger.setAttribute('aria-disabled', mode === 'cross' ? 'false' : 'true');
     receiveTrigger.style.cursor = mode === 'cross' ? 'pointer' : 'not-allowed';
@@ -643,6 +636,7 @@ function applyTeamPickerMode(mode) {
   }
 
   syncTeamHiddenValue();
+  updateReceiveFieldVisibility();
   updateTeamSummaryDisplay();
   updateModalLayout();
 }
@@ -664,7 +658,7 @@ function updateTeamSummaryDisplay() {
     summaryId: 'receivePickerSummary',
     tagsId: 'receivePickerTags',
     clearBtnId: 'receivePickerClear',
-    enabled: teamPickerState.mode === 'cross' && teamPickerState.enabled,
+    enabled: teamPickerState.mode === 'cross' && teamPickerState.enabled && teamPickerState.receiveIds.length > 0,
     placeholder: teamPickerState.receiveSummaryMessage || '[所有被評分團隊]',
     selections: teamPickerState.receiveIds,
     role: 'receive',
@@ -905,6 +899,9 @@ function setTeamSelections(values, options = {}) {
   }
   updateTeamSummaryDisplay();
   syncTeamHiddenValue();
+  if (role === 'receive') {
+    updateReceiveFieldVisibility();
+  }
 }
 
 function syncTeamHiddenValue() {
@@ -926,6 +923,16 @@ function syncTeamHiddenValue() {
   hidden.value = assign.length ? assign.join(',') : 'ALL';
 }
 
+function updateReceiveFieldVisibility() {
+  const receiveField = document.getElementById('receiveTeamField');
+  if (!receiveField) return;
+  const hasReceive = Array.isArray(teamPickerState.receiveIds) && teamPickerState.receiveIds.length > 0;
+  const shouldShow = teamPickerState.mode === 'cross' && hasReceive;
+  receiveField.classList.toggle('d-none', !shouldShow);
+  receiveField.hidden = !shouldShow;
+  receiveField.style.display = shouldShow ? '' : 'none';
+}
+
 /* 載入資料表 */
 function loadPeriodTable() {
   const apiUrl = resolveCheckReviewPeriodsApiUrl();
@@ -937,6 +944,7 @@ function loadPeriodTable() {
           if (container) {
             container.innerHTML = html;
           }
+          updateReceiveFieldVisibility();
       })
       .catch(err => {
           console.error('載入資料表失敗:', err);
@@ -1004,6 +1012,8 @@ function editRow(row) {
   const statusInput = document.getElementById('pe_status');
   const statusValue = Number(row.pe_status ?? row.status_ID ?? 0);
   if (statusInput) statusInput.value = statusValue === 1 ? '1' : '0';
+  const cancelBtn = document.getElementById('cancelEditBtn');
+  if (cancelBtn) cancelBtn.classList.remove('d-none');
 
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
@@ -1026,6 +1036,17 @@ function resetForm() {
   setTeamSelections([], { role: 'receive', keepMessage: true });
   const statusInput = document.getElementById('pe_status');
   if (statusInput) statusInput.value = '1';
+  const defaultMode = 'in';
+  const hiddenModeInput = document.getElementById('mode_value');
+  if (hiddenModeInput) hiddenModeInput.value = defaultMode;
+  applyTeamPickerMode(defaultMode);
+  const labelEl = document.getElementById('modeLabel');
+  const hintEl = document.getElementById('modeHint');
+  const targetBtn = document.querySelector(`.mode-option[data-mode="${defaultMode}"]`);
+  if (labelEl && targetBtn) labelEl.textContent = targetBtn.textContent.trim();
+  if (hintEl && targetBtn) hintEl.textContent = targetBtn.dataset.hint || ' ';
+  const cancelBtn = document.getElementById('cancelEditBtn');
+  if (cancelBtn) cancelBtn.classList.add('d-none');
 }
 
 window.editRow = editRow;

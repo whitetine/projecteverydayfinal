@@ -25,7 +25,7 @@ $sort = $_GET['sort'] ?? 'created';
       </li>
       </ul>
     </div>
-  <input type="hidden" id="mode_value" name="pe_mode" value="in">
+  <input type="hidden" id="mode_value" name="pe_mode" value="in" form="periodForm">
   <small class="text-muted" id="modeHint">請選擇模式以查看說明</small>
   </div>
 
@@ -77,24 +77,26 @@ $sort = $_GET['sort'] ?? 'created';
             <button type="button" class="clear-btn" id="teamPickerClear" aria-label="清除指定團隊">&times;</button>
           </div>
           <input type="hidden" name="pe_target_ID" id="team_input" value="ALL">
-        </div>
-        <div class="col-md-4 d-none" id="receiveTeamField">
-          <label class="form-label">被評分團隊</label>
-          <div class="team-picker-input" id="receivePickerTrigger" role="button" tabindex="0" aria-label="被評分團隊挑選">
-            <div class="team-picker-content">
-              <span id="receivePickerSummary" class="placeholder">僅團隊間互評可設定</span>
-              <div class="team-picker-tags" id="receivePickerTags"></div>
+
+          <div class="mt-3 d-none" id="receiveTeamField">
+            <label class="form-label">被評分團隊</label>
+            <div class="team-picker-input" id="receivePickerTrigger" role="button" tabindex="0" aria-label="被評分團隊挑選">
+              <div class="team-picker-content">
+                <span id="receivePickerSummary" class="placeholder">僅團隊間互評可設定</span>
+                <div class="team-picker-tags" id="receivePickerTags"></div>
+              </div>
+              <button type="button" class="clear-btn" id="receivePickerClear" aria-label="清除被評分團隊">&times;</button>
             </div>
-            <button type="button" class="clear-btn" id="receivePickerClear" aria-label="清除被評分團隊">&times;</button>
+            <input type="hidden" id="team_receive_input" value="">
           </div>
-          <input type="hidden" id="team_receive_input" value="">
         </div>
 
         <input type="hidden" name="pe_status" id="pe_status" value="1">
 
-        <div class="col-12">
+        <div class="col-12 d-flex gap-2">
           <button class="btn btn-primary" type="submit" id="submitBtn">新增</button>
           <button class="btn btn-secondary" type="button" onclick="resetForm()">清空</button>
+          <button class="btn btn-outline-secondary d-none" type="button" id="cancelEditBtn" onclick="resetForm()">取消編輯</button>
         </div>
       </form>
     </div>
