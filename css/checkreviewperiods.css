@@ -147,6 +147,44 @@
   font-weight: 500;
 }
 
+.team-picker-input .clear-btn {
+  background: transparent;
+  border: none;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: #6c757d;
+  transition: all 0.15s ease;
+  font-size: 18px;
+  line-height: 1;
+  opacity: 0.6;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.team-picker-input .clear-btn:hover {
+  opacity: 1;
+  background: rgba(0, 0, 0, 0.05);
+  color: #333;
+  transform: scale(1.1);
+}
+
+.team-picker-input .clear-btn:active {
+  transform: scale(0.95);
+  background: rgba(0, 0, 0, 0.1);
+}
+
+.team-picker-input .clear-btn:focus {
+  outline: none;
+  opacity: 1;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.1);
+}
+
 .team-picker-chip {
   display: inline-flex;
   align-items: center;
@@ -203,18 +241,57 @@
 
 .team-picker-dialog .btn-close {
   position: absolute;
-  top: 1rem;
-  right: 1.25rem;
-  background: rgba(15,23,42,0.08);
-  border-radius: 999px;
+  top: 0.75rem;
+  right: 0.75rem;
+  background: transparent;
   border: none;
   width: 32px;
   height: 32px;
-  font-size: 1.1rem;
+  padding: 0;
+  margin: 0;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
+  color: #6c757d;
+  transition: all 0.15s ease;
+  z-index: 15;
+  font-size: 0;
+  line-height: 0;
+  opacity: 0.5;
+  border-radius: 50%;
+}
+
+.team-picker-dialog .btn-close::before {
+  content: '';
+  width: 16px;
+  height: 16px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%236c757d'%3E%3Cpath d='M.293.293a1 1 0 0 1 1.414 0L8 6.586 14.293.293a1 1 0 1 1 1.414 1.414L9.414 8l6.293 6.293a1 1 0 0 1-1.414 1.414L8 9.414l-6.293 6.293a1 1 0 0 1-1.414-1.414L6.586 8 .293 1.707a1 1 0 0 1 0-1.414z'/%3E%3C/svg%3E");
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  display: block;
+  transition: all 0.15s ease;
+}
+
+.team-picker-dialog .btn-close:hover {
+  opacity: 1;
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.team-picker-dialog .btn-close:hover::before {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%23333'%3E%3Cpath d='M.293.293a1 1 0 0 1 1.414 0L8 6.586 14.293.293a1 1 0 1 1 1.414 1.414L9.414 8l6.293 6.293a1 1 0 0 1-1.414 1.414L8 9.414l-6.293 6.293a1 1 0 0 1-1.414-1.414L6.586 8 .293 1.707a1 1 0 0 1 0-1.414z'/%3E%3C/svg%3E");
+}
+
+.team-picker-dialog .btn-close:active {
+  transform: scale(0.95);
+  background: rgba(0, 0, 0, 0.1);
+}
+
+.team-picker-dialog .btn-close:focus {
+  outline: none;
+  opacity: 1;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.1);
 }
 
 .team-picker-header {
@@ -222,7 +299,8 @@
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  padding: 1.25rem 1.5rem .5rem;
+  padding: 1.25rem 3.5rem .5rem 1.5rem;
+  position: relative;
 }
 
 .team-picker-title {
