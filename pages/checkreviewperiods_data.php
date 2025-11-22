@@ -221,6 +221,7 @@ function fetchTeamInfoByIds(PDO $conn, array $teamIds) {
     $columns = ['team_ID'];
     if (teamColumnExists($conn, 'class_ID')) $columns[] = 'class_ID';
     if (teamColumnExists($conn, 'cohort_ID')) $columns[] = 'cohort_ID';
+    if (teamColumnExists($conn, 'grade_no')) $columns[] = 'grade_no';
     if (teamColumnExists($conn, 'team_project_name')) $columns[] = 'team_project_name';
     if (teamColumnExists($conn, 'team_status')) $columns[] = 'team_status';
     $columnSql = implode(', ', array_unique($columns));
@@ -240,6 +241,7 @@ function fetchTeamsByFilters(PDO $conn, array $cohortIds, array $classIds) {
     $columns = ['team_ID'];
     if (teamColumnExists($conn, 'class_ID')) $columns[] = 'class_ID';
     if (teamColumnExists($conn, 'cohort_ID')) $columns[] = 'cohort_ID';
+    if (teamColumnExists($conn, 'grade_no')) $columns[] = 'grade_no';
     if (teamColumnExists($conn, 'team_project_name')) $columns[] = 'team_project_name';
     if (teamColumnExists($conn, 'team_status')) $columns[] = 'team_status';
     $columnSql = implode(', ', array_unique($columns));
@@ -424,10 +426,34 @@ function syncPeriodTargets(PDO $conn, $periodId, $rawTargetValue, array $cohortI
         }
     }
     
+    // 獲取用戶選擇的屆別ID（優先使用第一個選中的屆別）
+    $selectedCohortId = null;
+    if ($cohortIds && count($cohortIds) > 0) {
+        $selectedCohortId = (int)$cohortIds[0];
+    }
+    
     foreach ($insertRows as [$info, $statusValue]) {
         $params = [$periodId, $info['team_ID']];
-        if ($includeClass) $params[] = $info['class_ID'] ?? null;
-        if ($includeCohort) $params[] = $info['cohort_ID'] ?? null;
+        // 班級ID從團隊資料中獲取（每個團隊都屬於一個特定的班級）
+        // 如果團隊資料中沒有 class_ID，且用戶選擇了班級，則使用第一個選中的班級ID
+        if ($includeClass) {
+            $classId = $info['class_ID'] ?? null;
+            // 如果團隊資料中沒有 class_ID，且用戶選擇了班級，使用第一個選中的班級ID
+            if ($classId === null && $classIds && count($classIds) > 0) {
+                $classId = (int)$classIds[0];
+            }
+            $params[] = $classId;
+        }
+        // 屆別ID從團隊資料中獲取，如果團隊資料中沒有則使用用戶選擇的屆別ID
+        if ($includeCohort) {
+            $cohortId = $info['cohort_ID'] ?? null;
+            // 如果團隊資料中沒有 cohort_ID，且用戶選擇了屆別，使用第一個選中的屆別ID
+            if ($cohortId === null && $selectedCohortId !== null) {
+                $cohortId = $selectedCohortId;
+            }
+            $params[] = $cohortId;
+        }
+        // 年級從團隊資料中獲取（因為前端沒有年級選擇器）
         if ($includeGrade) $params[] = $info['grade_no'] ?? null;
         if ($petargetHasStatus) $params[] = $statusValue;
         $stmt->execute($params);
@@ -572,7 +598,7 @@ if (($_POST['action'] ?? '') === 'create') {
     }
     if ($hasCohortId) {
         $fields[] = 'cohort_ID';
-        $values[] = resolvePostedCohortId();
+        $values[] = $_POST['cohort_values'][0] ?? null;
         $placeholders[] = '?';
     }
     if ($hasPeClassId) {
@@ -701,7 +727,7 @@ if (($_POST['action'] ?? '') === 'update') {
     }
     if ($hasCohortId) {
         $sets[] = 'cohort_ID=?';
-        $values[] = resolvePostedCohortId();
+        $values[] = $_POST['cohort_values'][0] ?? null;
     }
     if ($hasPeClassId) {
         $sets[] = 'pe_class_ID=?';
@@ -913,6 +939,8 @@ $hasPeMode = (bool)$periodModeColumn;
 if ($hasCohortId || $hasPeMode) {
     $selectedCols = ['p.*'];
     if ($hasCohortId) {
+        // 明確選取 p.cohort_ID，避免被 JOIN 的 c.cohort_ID 覆蓋
+        $selectedCols[] = 'p.cohort_ID as period_cohort_ID';
         $selectedCols[] = 'c.cohort_name';
         $selectedCols[] = 'c.year_label';
     } else {
@@ -989,7 +1017,18 @@ $periodTargetMap = fetchPeriodTargetTeams($conn, $periodIdList);
 
 $teamIdSet = [];
 foreach ($rows as &$rowItem) {
-$payload = parseTeamTarget($rowItem['pe_target_ID'] ?? '');
+    try {
+        // 確保 _team_payload 始終存在，即使處理失敗
+        if (!isset($rowItem['_team_payload'])) {
+            $rowItem['_team_payload'] = [
+                'assign' => [],
+                'receive' => [],
+                'is_all' => false,
+                'mode' => 'in'
+            ];
+        }
+        
+        $payload = parseTeamTarget($rowItem['pe_target_ID'] ?? '');
 $rawModeSource = '';
 if ($periodModeColumn && isset($rowItem[$periodModeColumn]) && $rowItem[$periodModeColumn] !== null && $rowItem[$periodModeColumn] !== '') {
     $rawModeSource = $rowItem[$periodModeColumn];
@@ -1087,13 +1126,23 @@ if (in_array($rawModeNormalized, ['cross', 'between', 'inter'], true) || trim($r
     $rowItem['pe_mode'] = $rowItem['mode']; // 也設置 pe_mode，供前端使用
     $payload['mode'] = $rowItem['mode'];
     $rowItem['_team_payload'] = $payload;
-    foreach (['assign', 'receive'] as $role) {
-        foreach ($payload[$role] as $teamId) {
-            $teamId = (string)$teamId;
-            if ($teamId !== '') {
-                $teamIdSet[$teamId] = true;
+        foreach (['assign', 'receive'] as $role) {
+            foreach ($payload[$role] as $teamId) {
+                $teamId = (string)$teamId;
+                if ($teamId !== '') {
+                    $teamIdSet[$teamId] = true;
+                }
             }
         }
+    } catch (Exception $e) {
+        // 如果處理過程中出現錯誤，確保 _team_payload 仍然存在
+        error_log('處理評分時段資料時發生錯誤: ' . $e->getMessage());
+        $rowItem['_team_payload'] = [
+            'assign' => [],
+            'receive' => [],
+            'is_all' => false,
+            'mode' => 'in'
+        ];
     }
 }
 unset($rowItem);
@@ -1124,29 +1173,47 @@ foreach ($tmp as $r) $rankByCreated[$r['period_ID']] = $i++;
 <table class="table table-bordered table-striped period-table">
   <thead class="table-light">
     <tr>
-      <th>開始日</th>
-      <th>結束日</th>
-      <th>標題</th>
-      <th>屆別</th>
-      <th>指定團隊</th>
-      <th>被評分團隊</th>
-      <th>操作</th>
+      <th class="text-center">標題</th>
+      <th class="text-center">屆別</th>
+      <th class="text-center">指定團隊</th>
+      <th class="text-center">被評分團隊</th>
+      <th class="text-center">開始時間</th>
+      <th class="text-center">結束時間</th>
+      <th class="text-center">操作</th>
     </tr>
   </thead>
   <tbody>
+<?php if (empty($rows)): ?>
+    <tr>
+      <td colspan="7" class="text-center text-muted">目前尚無評分時段資料</td>
+    </tr>
+<?php else: ?>
 <?php foreach ($rows as $r): ?>
     <tr>
-      <td><?= htmlspecialchars($r['period_start_d'] ?? '') ?></td>
-      <td><?= htmlspecialchars($r['period_end_d'] ?? '') ?></td>
-      <td><?= htmlspecialchars($r['period_title'] ?? '') ?></td>
-      <td><?= 
-        ($r['cohort_name'] ?? '') ? 
-        htmlspecialchars($r['cohort_name']) . ' (' . htmlspecialchars($r['year_label'] ?? '') . ')' : 
-        '－'
+      <td class="text-center"><?= htmlspecialchars($r['period_title'] ?? '') ?></td>
+      <td class="text-center"><?php
+        // 優先使用 period_cohort_ID（明確選取的），如果沒有則使用 cohort_ID
+        $cohortId = $r['period_cohort_ID'] ?? $r['cohort_ID'] ?? null;
+        $cohortName = $r['cohort_name'] ?? '';
+        $yearLabel = $r['year_label'] ?? '';
+        
+        if ($cohortName) {
+            echo htmlspecialchars($cohortName);
+            if ($yearLabel) {
+                echo ' (' . htmlspecialchars($yearLabel) . ')';
+            }
+        } elseif ($cohortId !== null && $cohortId !== '') {
+            // 如果有 cohort_ID 但沒有 cohort_name，可能是 JOIN 失敗或 cohortdata 中沒有對應記錄
+            echo '屆別ID: ' . htmlspecialchars($cohortId);
+        } else {
+            echo '－';
+        }
       ?></td>
-      <td><?= htmlspecialchars(describeTeamSelection($r['_team_payload'], 'assign', $teamNameMap)) ?></td>
-      <td><?= htmlspecialchars(describeTeamSelection($r['_team_payload'], 'receive', $teamNameMap)) ?></td>
-      <td>
+      <td class="text-center"><?= htmlspecialchars(describeTeamSelection($r['_team_payload'] ?? ['assign' => [], 'receive' => [], 'is_all' => false, 'mode' => 'in'], 'assign', $teamNameMap)) ?></td>
+      <td class="text-center"><?= htmlspecialchars(describeTeamSelection($r['_team_payload'] ?? ['assign' => [], 'receive' => [], 'is_all' => false, 'mode' => 'in'], 'receive', $teamNameMap)) ?></td>
+      <td class="text-center"><?= htmlspecialchars($r['period_start_d'] ?? '') ?></td>
+      <td class="text-center"><?= htmlspecialchars($r['period_end_d'] ?? '') ?></td>
+      <td class="text-center">
         <button class="btn btn-sm btn-outline-primary" 
           onclick='editRow(<?= json_encode($r, JSON_UNESCAPED_UNICODE) ?>)'>編輯</button>
 
@@ -1159,6 +1226,7 @@ foreach ($tmp as $r) $rankByCreated[$r['period_ID']] = $i++;
       </td>
     </tr>
 <?php endforeach; ?>
+<?php endif; ?>
   </tbody>
 </table>
 <div class="pager-bar" id="periodPagerBar" style="display: none;">

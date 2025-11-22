@@ -244,7 +244,8 @@ function renderCohortOptions(list) {
 function handleClassChange(triggerLoad = true) {
   const selected = getSelectedClassValues();
   const primaryInput = document.getElementById('class_primary');
-  if (primaryInput) primaryInput.value = selected[0] || '';
+  // 提交所有選中的班級ID（用逗號分隔），以便後端可以處理多個班級
+  if (primaryInput) primaryInput.value = selected.join(',');
   if (triggerLoad) {
     loadTeamList(getSelectedCohortValues(), selected);
   }
@@ -305,7 +306,8 @@ function setClassSelections(values, triggerLoad = false) {
     ? values.map(String).filter(Boolean)
     : (values ? [String(values)] : []);
   const primaryInput = document.getElementById('class_primary');
-  if (primaryInput) primaryInput.value = arr[0] || '';
+  // 提交所有選中的班級ID（用逗號分隔）
+  if (primaryInput) primaryInput.value = arr.join(',');
   if (!select) {
     pendingClassValue = arr[0] || '';
     return;
@@ -980,8 +982,21 @@ function loadPeriodTable(page = 1) {
     params.set('page', page);
   }
   return fetch(`${apiUrl}?${params.toString()}`)
-      .then(r => r.text())
+      .then(r => {
+          if (!r.ok) {
+              throw new Error(`HTTP ${r.status}: ${r.statusText}`);
+          }
+          return r.text();
+      })
       .then(html => {
+          if (!html || html.trim() === '') {
+              console.error('表格資料為空');
+              const container = document.getElementById("periodTable");
+              if (container) {
+                  container.innerHTML = '<div class="alert alert-warning">無法載入表格資料（回應為空）</div>';
+              }
+              return;
+          }
           const container = document.getElementById("periodTable");
           if (container) {
             // 先提取分頁資訊（從 script 標籤中）
