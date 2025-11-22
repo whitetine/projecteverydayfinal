@@ -261,22 +261,51 @@ function fetchPeriodTargetTeams(PDO $conn, array $periodIds) {
     $periodIds = array_values(array_unique(array_filter(array_map('intval', $periodIds))));
     if (!$periodIds) return [];
     $placeholders = implode(',', array_fill(0, count($periodIds), '?'));
-    $stmt = $conn->prepare("SELECT period_ID, pe_team_ID, pe_cohort_ID FROM petargetdata WHERE period_ID IN ($placeholders)");
+    // 檢查是否有 status_ID 欄位
+    $hasStatus = petargetColumnExists($conn, 'status_ID');
+    $statusColumn = $hasStatus ? ', status_ID' : '';
+    $stmt = $conn->prepare("SELECT period_ID, pe_team_ID, pe_cohort_ID{$statusColumn} FROM petargetdata WHERE period_ID IN ($placeholders)");
     $stmt->execute($periodIds);
     $map = [];
     foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
         $pid = (int)$row['period_ID'];
         if (!isset($map[$pid])) {
             $map[$pid] = [
-                'team_ids' => [],
+                'team_ids' => [],          // 用於向後相容，包含所有團隊（去重後）
+                'assign_team_ids' => [],   // status_ID = 1 的團隊（評分者）
+                'receive_team_ids' => [],  // status_ID = 0 的團隊（被評分者）
                 'cohort_ids' => []
             ];
         }
-        if (isset($row['pe_team_ID']) && $row['pe_team_ID'] !== null) {
-            $map[$pid]['team_ids'][] = (int)$row['pe_team_ID'];
+        $status = $hasStatus && isset($row['status_ID']) ? (int)$row['status_ID'] : null;
+        $teamId = isset($row['pe_team_ID']) && $row['pe_team_ID'] !== null ? (int)$row['pe_team_ID'] : null;
+        $cohortId = isset($row['pe_cohort_ID']) && $row['pe_cohort_ID'] !== null ? (int)$row['pe_cohort_ID'] : null;
+        
+        if ($teamId !== null) {
+            // 根據 status_ID 分類
+            if ($status === 1) {
+                // 評分者（團隊間互評模式）
+                if (!in_array($teamId, $map[$pid]['assign_team_ids'], true)) {
+                    $map[$pid]['assign_team_ids'][] = $teamId;
+                }
+            } elseif ($status === 0 || $status === null) {
+                // 被評分者（團隊內互評模式：所有團隊都是 status_ID=0；團隊間互評模式：被評分團隊）
+                if (!in_array($teamId, $map[$pid]['receive_team_ids'], true)) {
+                    $map[$pid]['receive_team_ids'][] = $teamId;
+                }
+            }
+            
+            // 同時加入到 team_ids（用於向後相容，包含所有團隊，去重）
+            if (!in_array($teamId, $map[$pid]['team_ids'], true)) {
+                $map[$pid]['team_ids'][] = $teamId;
+            }
         }
-        if (isset($row['pe_cohort_ID']) && $row['pe_cohort_ID'] !== null) {
-            $map[$pid]['cohort_ids'][] = (int)$row['pe_cohort_ID'];
+        
+        if ($cohortId !== null) {
+            // 避免重複加入相同的屆別ID
+            if (!in_array($cohortId, $map[$pid]['cohort_ids'], true)) {
+                $map[$pid]['cohort_ids'][] = $cohortId;
+            }
         }
     }
     return $map;
@@ -301,19 +330,20 @@ function syncPeriodTargets(PDO $conn, $periodId, $rawTargetValue, array $cohortI
 
     $receiveMap = [];
     if ($mode === 'cross') {
+        // 團隊間互評模式
         if (!empty($payload['receive'])) {
+            // 如果有明確指定被評分團隊，使用指定的團隊
             $receiveMap = fetchTeamInfoByIds($conn, $payload['receive']);
         }
         if (!$receiveMap) {
+            // 如果沒有明確指定被評分團隊，預設為所有團隊（包括評分者自己）
+            // 注意：評分者也可以同時是被評者，所以不應該從 receiveMap 中移除 assignList
             $receiveMap = fetchTeamsByFilters($conn, $cohortIds, $classIds);
         }
-        if ($receiveMap && $assignList) {
-            foreach ($assignList as $info) {
-                $key = (string)($info['team_ID'] ?? '');
-                if ($key !== '') unset($receiveMap[$key]);
-            }
-        }
+        // 不再移除 assignList 中的團隊，因為一個團隊可以同時是評分者和被評者
+        // 例如：只指定 A 為評分者時，A 會同時有 status_ID=1 和 status_ID=0 的記錄
     } else {
+        // 團隊內互評模式：所有選入的團隊都是被評分團隊（status_ID = 0）
         if ($assignList) {
             foreach ($assignList as $info) {
                 $key = (string)($info['team_ID'] ?? '');
@@ -327,6 +357,7 @@ function syncPeriodTargets(PDO $conn, $periodId, $rawTargetValue, array $cohortI
     }
     $receiveList = array_values($receiveMap);
 
+    // 刪除該評分時段的所有舊記錄
     $conn->prepare("DELETE FROM petargetdata WHERE period_ID=?")->execute([$periodId]);
     if (!$assignList && !$receiveList) {
         return;
@@ -349,12 +380,35 @@ function syncPeriodTargets(PDO $conn, $periodId, $rawTargetValue, array $cohortI
     $sql = "INSERT INTO petargetdata ({$columnSql}) VALUES {$valuesTemplate}";
     $stmt = $conn->prepare($sql);
     $insertRows = [];
-    foreach ($assignList as $info) {
-        $insertRows[] = [$info, 1];
+    
+    if ($mode === 'in') {
+        // 團隊內互評：所有選入的團隊都是 status_ID = 0（被評分團隊），不區分評分者與被評者
+        // 所以只插入 receiveList，且 status_ID = 0
+        foreach ($receiveList as $info) {
+            $insertRows[] = [$info, 0];
+        }
+    } else {
+        // 團隊間互評：指定團隊為評分者（status_ID = 1），被評分團隊為 status_ID = 0
+        // 一個團隊可以同時是評分者和被評者，所以會產生兩筆記錄（status_ID=1 和 status_ID=0）
+        // 例如：只指定 A 為評分者時，會產生 A=1, A=0, B=0, C=0
+        
+        // 插入評分者（status_ID = 1）
+        foreach ($assignList as $info) {
+            $teamId = (int)($info['team_ID'] ?? 0);
+            if ($teamId > 0) {
+                $insertRows[] = [$info, 1];
+            }
+        }
+        
+        // 插入被評分團隊（status_ID = 0），包括評分者自己（如果評分者也在被評列表中）
+        foreach ($receiveList as $info) {
+            $teamId = (int)($info['team_ID'] ?? 0);
+            if ($teamId > 0) {
+                $insertRows[] = [$info, 0];
+            }
+        }
     }
-    foreach ($receiveList as $info) {
-        $insertRows[] = [$info, 0];
-    }
+    
     foreach ($insertRows as [$info, $statusValue]) {
         $params = [$periodId, $info['team_ID']];
         if ($includeClass) $params[] = $info['class_ID'] ?? null;
@@ -362,6 +416,11 @@ function syncPeriodTargets(PDO $conn, $periodId, $rawTargetValue, array $cohortI
         if ($includeGrade) $params[] = $info['grade_no'] ?? null;
         if ($petargetHasStatus) $params[] = $statusValue;
         $stmt->execute($params);
+    }
+    
+    // 在團隊內互評模式下，確保刪除所有 status_ID = 1 的記錄（以防萬一有錯誤的資料）
+    if ($mode === 'in' && $petargetHasStatus) {
+        $conn->prepare("DELETE FROM petargetdata WHERE period_ID=? AND status_ID=1")->execute([$periodId]);
     }
 }
 
@@ -438,6 +497,31 @@ switch ($sort) {
 /* CRUD: create */
 if (($_POST['action'] ?? '') === 'create') {
     try {
+    // 驗證開始時間和結束時間
+    $startTime = $_POST['period_start_d'] ?? '';
+    $endTime = $_POST['period_end_d'] ?? '';
+    if ($startTime && $endTime) {
+        $startTimestamp = strtotime($startTime);
+        $endTimestamp = strtotime($endTime);
+        if ($startTimestamp === false || $endTimestamp === false) {
+            if (isAjaxRequest()) {
+                jsonResponse([
+                    'success' => false,
+                    'msg' => '開始時間或結束時間格式錯誤'
+                ], 200);
+            }
+            throw new Exception('開始時間或結束時間格式錯誤');
+        }
+        if ($endTimestamp <= $startTimestamp) {
+            if (isAjaxRequest()) {
+                jsonResponse([
+                    'success' => false,
+                    'msg' => '結束時間必須晚於開始時間'
+                ], 200);
+            }
+            throw new Exception('結束時間必須晚於開始時間');
+        }
+    }
     // 檢查欄位是否存在
     $hasCohortId = false;
     $hasPeTargetId = false;
@@ -538,6 +622,31 @@ if (($_POST['action'] ?? '') === 'create') {
 /* CRUD: update */
 if (($_POST['action'] ?? '') === 'update') {
     try {
+    // 驗證開始時間和結束時間
+    $startTime = $_POST['period_start_d'] ?? '';
+    $endTime = $_POST['period_end_d'] ?? '';
+    if ($startTime && $endTime) {
+        $startTimestamp = strtotime($startTime);
+        $endTimestamp = strtotime($endTime);
+        if ($startTimestamp === false || $endTimestamp === false) {
+            if (isAjaxRequest()) {
+                jsonResponse([
+                    'success' => false,
+                    'msg' => '開始時間或結束時間格式錯誤'
+                ], 200);
+            }
+            throw new Exception('開始時間或結束時間格式錯誤');
+        }
+        if ($endTimestamp <= $startTimestamp) {
+            if (isAjaxRequest()) {
+                jsonResponse([
+                    'success' => false,
+                    'msg' => '結束時間必須晚於開始時間'
+                ], 200);
+            }
+            throw new Exception('結束時間必須晚於開始時間');
+        }
+    }
     // 檢查欄位是否存在
     $hasCohortId = false;
     $hasPeTargetId = false;
@@ -857,25 +966,74 @@ if (in_array($rawModeNormalized, ['cross', 'between', 'inter'], true) || trim($r
 } elseif (in_array($rawModeNormalized, ['in', 'inner', 'within'], true) || trim($rawModeSource) === '團隊內互評') {
     $explicitMode = 'in';
 }
-    $targetInfo = $periodTargetMap[(int)($rowItem['period_ID'] ?? 0)] ?? ['team_ids' => [], 'cohort_ids' => []];
-    $fallbackTargets = $targetInfo['team_ids'] ?? [];
+    $targetInfo = $periodTargetMap[(int)($rowItem['period_ID'] ?? 0)] ?? [
+        'team_ids' => [],
+        'assign_team_ids' => [],
+        'receive_team_ids' => [],
+        'cohort_ids' => []
+    ];
+    
+    // 判斷是否為團隊間互評
+    $isCrossMode = ($explicitMode === 'cross');
+    
+    // 在團隊內互評模式下，強制過濾掉 assign_team_ids（因為不應該有 status_ID=1 的記錄）
+    // 只使用 receive_team_ids（status_ID=0）作為唯一的資料來源
+    if (!$isCrossMode) {
+        // 團隊內互評模式：完全忽略 assign_team_ids，只使用 receive_team_ids
+        $targetInfo['assign_team_ids'] = [];
+        $targetInfo['receive_team_ids'] = array_values(array_unique($targetInfo['receive_team_ids'] ?? []));
+        // 重新計算 team_ids，只包含 receive_team_ids（去重後）
+        $targetInfo['team_ids'] = $targetInfo['receive_team_ids'];
+    }
+    
     $cohortValues = array_unique(array_filter($targetInfo['cohort_ids'] ?? []));
     $rowItem['cohort_values'] = implode(',', $cohortValues);
     
-    // 判斷是否為團隊間互評：有 receive 欄位且不為空，或原始值是 JSON 格式
-    $isCrossMode = !empty($payload['receive']);
+    // 在團隊內互評模式下，強制使用資料庫的資料（只使用 receive_team_ids，status_ID=0）
+    // 在團隊間互評模式下，如果資料庫有資料，也優先使用資料庫的資料
+    // 對於團隊內互評模式，只要資料庫中有任何記錄（不管 status_ID），都使用資料庫的資料（只使用 receive_team_ids）
+    $hasDbDataForIn = !$isCrossMode && count($targetInfo['receive_team_ids'] ?? []) > 0;
+    $hasDbDataForCross = $isCrossMode && (count($targetInfo['assign_team_ids'] ?? []) > 0 || count($targetInfo['receive_team_ids'] ?? []) > 0);
+    $hasDbData = $hasDbDataForIn || $hasDbDataForCross;
     
-    if ($fallbackTargets) {
+    // 如果資料庫有資料，優先使用資料庫資料（特別是團隊內互評模式，必須使用資料庫資料）
+    if ($hasDbData) {
         if ($isCrossMode) {
-            if (!$payload['receive'] || $payload['is_all']) {
-                $payload['receive'] = array_map('strval', $fallbackTargets);
-                $payload['is_all'] = false;
-            }
+            // 團隊間互評：assign 使用 assign_team_ids，receive 使用 receive_team_ids
+            $assignFromDb = array_map('strval', $targetInfo['assign_team_ids'] ?? []);
+            $receiveFromDb = array_map('strval', $targetInfo['receive_team_ids'] ?? []);
+            $payload['assign'] = array_values(array_unique($assignFromDb));
+            $payload['receive'] = array_values(array_unique($receiveFromDb));
+            $payload['is_all'] = false;
         } else {
-            if ($payload['is_all'] || (!count($payload['assign']) && !count($payload['receive']))) {
-                $payload['assign'] = array_map('strval', $fallbackTargets);
-                $payload['receive'] = array_map('strval', $fallbackTargets);
-                $payload['is_all'] = false;
+            // 團隊內互評：所有團隊都是 status_ID=0，所以只使用 receive_team_ids
+            // 在團隊內互評模式下，不應該有 status_ID=1 的記錄，所以忽略 assign_team_ids
+            // 完全忽略 pe_target_ID 欄位中的資料，只使用資料庫的 receive_team_ids
+            $receiveFromDb = array_map('strval', $targetInfo['receive_team_ids'] ?? []);
+            $uniqueTeams = array_values(array_unique($receiveFromDb));
+            // 完全重置 payload，只使用資料庫資料
+            $payload = [
+                'assign' => $uniqueTeams,
+                'receive' => $uniqueTeams,
+                'is_all' => false
+            ];
+        }
+    } else {
+        // 如果資料庫沒有資料，使用 pe_target_ID 的資料
+        if ($payload['is_all'] || (!count($payload['assign']) && !count($payload['receive']))) {
+            // 沒有資料，不處理
+        } else {
+            // 確保去重
+            if (!$isCrossMode) {
+                // 團隊內互評模式下，assign 和 receive 應該是相同的
+                $allTeams = array_values(array_unique(array_merge($payload['assign'] ?? [], $payload['receive'] ?? [])));
+                if ($allTeams) {
+                    $payload['assign'] = $allTeams;
+                    $payload['receive'] = $allTeams;
+                }
+            } else {
+                $payload['assign'] = array_values(array_unique($payload['assign'] ?? []));
+                $payload['receive'] = array_values(array_unique($payload['receive'] ?? []));
             }
         }
     }
@@ -885,7 +1043,9 @@ if (in_array($rawModeNormalized, ['cross', 'between', 'inter'], true) || trim($r
             'receive' => $payload['receive']
         ], JSON_UNESCAPED_UNICODE);
     }
-    $rowItem['mode'] = $explicitMode ?? (!empty($payload['receive']) ? 'cross' : 'in');
+    // 設置模式值，優先使用從資料庫讀取的 explicitMode，如果沒有則使用預設值
+    $rowItem['mode'] = $explicitMode ?? 'in';
+    $rowItem['pe_mode'] = $rowItem['mode']; // 也設置 pe_mode，供前端使用
     $payload['mode'] = $rowItem['mode'];
     $rowItem['_team_payload'] = $payload;
     foreach (['assign', 'receive'] as $role) {
