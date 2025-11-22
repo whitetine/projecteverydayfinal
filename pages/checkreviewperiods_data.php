@@ -598,7 +598,17 @@ if (($_POST['action'] ?? '') === 'create') {
     }
     if ($hasCohortId) {
         $fields[] = 'cohort_ID';
-        $values[] = $_POST['cohort_values'][0] ?? null;
+        // 處理 cohort_values：可能是字串或陣列
+        $cohortValue = $_POST['cohort_values'] ?? null;
+        if (is_array($cohortValue)) {
+            $cohortValue = $cohortValue[0] ?? null;
+        }
+        // 如果是字串，可能是逗號分隔的多個值，取第一個
+        if (is_string($cohortValue) && $cohortValue !== '') {
+            $cohortParts = explode(',', $cohortValue);
+            $cohortValue = trim($cohortParts[0]);
+        }
+        $values[] = $cohortValue ? (int)$cohortValue : null;
         $placeholders[] = '?';
     }
     if ($hasPeClassId) {
@@ -727,7 +737,17 @@ if (($_POST['action'] ?? '') === 'update') {
     }
     if ($hasCohortId) {
         $sets[] = 'cohort_ID=?';
-        $values[] = $_POST['cohort_values'][0] ?? null;
+        // 處理 cohort_values：可能是字串或陣列
+        $cohortValue = $_POST['cohort_values'] ?? null;
+        if (is_array($cohortValue)) {
+            $cohortValue = $cohortValue[0] ?? null;
+        }
+        // 如果是字串，可能是逗號分隔的多個值，取第一個
+        if (is_string($cohortValue) && $cohortValue !== '') {
+            $cohortParts = explode(',', $cohortValue);
+            $cohortValue = trim($cohortParts[0]);
+        }
+        $values[] = $cohortValue ? (int)$cohortValue : null;
     }
     if ($hasPeClassId) {
         $sets[] = 'pe_class_ID=?';
@@ -960,7 +980,8 @@ if ($hasCohortId || $hasPeMode) {
     $sql = "SELECT " . implode(', ', $selectedCols) . "
             FROM perioddata p";
     if ($hasCohortId) {
-        $sql .= " LEFT JOIN cohortdata c ON p.cohort_ID = c.cohort_ID";
+        // 使用 CAST 確保資料類型匹配，並處理 NULL 值
+        $sql .= " LEFT JOIN cohortdata c ON CAST(p.cohort_ID AS CHAR) = CAST(c.cohort_ID AS CHAR) AND p.cohort_ID IS NOT NULL";
     }
     if ($hasPeTargetId) {
         $sql .= " LEFT JOIN teamdata t ON CAST(p.pe_target_ID AS CHAR) = CAST(t.team_ID AS CHAR) AND p.pe_target_ID != 'ALL'";
@@ -1192,19 +1213,62 @@ foreach ($tmp as $r) $rankByCreated[$r['period_ID']] = $i++;
     <tr>
       <td class="text-center"><?= htmlspecialchars($r['period_title'] ?? '') ?></td>
       <td class="text-center"><?php
-        // 優先使用 period_cohort_ID（明確選取的），如果沒有則使用 cohort_ID
-        $cohortId = $r['period_cohort_ID'] ?? $r['cohort_ID'] ?? null;
+        // 優先使用 petargetdata 表中的 pe_cohort_ID（從 cohort_values 中獲取）
+        // 如果沒有，則使用 perioddata 表中的 cohort_ID
+        $cohortIds = [];
         $cohortName = $r['cohort_name'] ?? '';
         $yearLabel = $r['year_label'] ?? '';
         
-        if ($cohortName) {
+        // 優先從 cohort_values 獲取（來自 petargetdata 表，可能有多個）
+        if (!empty($r['cohort_values'])) {
+            $cohortValues = explode(',', $r['cohort_values']);
+            foreach ($cohortValues as $cv) {
+                $cv = trim($cv);
+                if ($cv !== '' && is_numeric($cv)) {
+                    $cohortIds[] = (int)$cv;
+                }
+            }
+        }
+        
+        // 如果沒有，則使用 perioddata 表的 cohort_ID
+        if (empty($cohortIds)) {
+            $cohortId = $r['period_cohort_ID'] ?? $r['cohort_ID'] ?? null;
+            if ($cohortId !== null && $cohortId !== '' && $cohortId !== '0') {
+                $cohortIds[] = (int)$cohortId;
+            }
+        }
+        
+        // 如果有從 JOIN 獲取的屆別名稱，且只有一個屆別，直接使用
+        if (!empty($cohortName) && trim($cohortName) !== '' && count($cohortIds) === 1) {
             echo htmlspecialchars($cohortName);
-            if ($yearLabel) {
+            if ($yearLabel && trim($yearLabel) !== '') {
                 echo ' (' . htmlspecialchars($yearLabel) . ')';
             }
-        } elseif ($cohortId !== null && $cohortId !== '') {
-            // 如果有 cohort_ID 但沒有 cohort_name，可能是 JOIN 失敗或 cohortdata 中沒有對應記錄
-            echo '屆別ID: ' . htmlspecialchars($cohortId);
+        } elseif (!empty($cohortIds)) {
+            // 查詢所有屆別的名稱
+            try {
+                $placeholders = implode(',', array_fill(0, count($cohortIds), '?'));
+                $cohortStmt = $conn->prepare("SELECT cohort_ID, cohort_name, year_label FROM cohortdata WHERE cohort_ID IN ($placeholders) ORDER BY cohort_ID ASC");
+                $cohortStmt->execute($cohortIds);
+                $cohortRows = $cohortStmt->fetchAll(PDO::FETCH_ASSOC);
+                
+                if (!empty($cohortRows)) {
+                    $cohortLabels = [];
+                    foreach ($cohortRows as $cohortRow) {
+                        $label = htmlspecialchars($cohortRow['cohort_name']);
+                        if (!empty($cohortRow['year_label'])) {
+                            $label .= ' (' . htmlspecialchars($cohortRow['year_label']) . ')';
+                        }
+                        $cohortLabels[] = $label;
+                    }
+                    echo implode('、', $cohortLabels); // 使用頓號分隔多個屆別
+                } else {
+                    // 如果查詢不到，顯示屆別ID
+                    echo '屆別ID: ' . implode(', ', $cohortIds);
+                }
+            } catch (Exception $e) {
+                echo '屆別ID: ' . implode(', ', $cohortIds);
+            }
         } else {
             echo '－';
         }
