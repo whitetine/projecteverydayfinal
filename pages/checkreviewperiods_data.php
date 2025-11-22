@@ -833,13 +833,75 @@ if (isset($_GET['class_list'])) {
   header('Content-Type: application/json; charset=utf-8');
 
   try {
-      $stmt = $conn->prepare("
-          SELECT c_ID, c_name
-          FROM classdata
-          ORDER BY c_ID ASC
-      ");
-      $stmt->execute();
-      echo json_encode($stmt->fetchAll(PDO::FETCH_ASSOC), JSON_UNESCAPED_UNICODE);
+      $role_ID = $_SESSION['role_ID'] ?? null;
+      $u_ID = $_SESSION['u_ID'] ?? null;
+      
+      // 角色 1 或 2：顯示所有班級
+      if (in_array($role_ID, [1, 2])) {
+          $stmt = $conn->prepare("
+              SELECT c_ID, c_name
+              FROM classdata
+              ORDER BY c_ID ASC
+          ");
+          $stmt->execute();
+          echo json_encode($stmt->fetchAll(PDO::FETCH_ASSOC), JSON_UNESCAPED_UNICODE);
+      }
+      // 角色 3：只顯示自己班級的班級
+      elseif ($role_ID == 3 && $u_ID) {
+          $stmt = $conn->prepare("
+              SELECT DISTINCT c.c_ID, c.c_name
+              FROM classdata c
+              JOIN enrollmentdata e ON e.class_ID = c.c_ID
+              WHERE e.enroll_u_ID = ? 
+                AND e.enroll_status = 1
+              ORDER BY c.c_ID ASC
+          ");
+          $stmt->execute([$u_ID]);
+          echo json_encode($stmt->fetchAll(PDO::FETCH_ASSOC), JSON_UNESCAPED_UNICODE);
+      }
+      // 角色 4：顯示自己指導團隊所屬的班級
+      elseif ($role_ID == 4 && $u_ID) {
+          // teammember 裡的 user 欄位名稱可能是 team_u_ID 或 u_ID
+          $colsTm = $conn->query("SHOW COLUMNS FROM teammember")->fetchAll(PDO::FETCH_COLUMN);
+          $teamUserField = in_array('team_u_ID', $colsTm) ? 'team_u_ID' : 'u_ID';
+          
+          // 先獲取指導老師的團隊ID列表
+          $stmt = $conn->prepare("
+              SELECT DISTINCT tm.team_ID
+              FROM teammember tm
+              JOIN userrolesdata ur ON ur.ur_u_ID = tm.{$teamUserField}
+              JOIN teamdata t ON t.team_ID = tm.team_ID
+              WHERE tm.{$teamUserField} = ?
+                AND ur.role_ID = 4
+                AND ur.user_role_status = 1
+                AND t.team_status = 1
+          ");
+          $stmt->execute([$u_ID]);
+          $teacherTeamIds = array_column($stmt->fetchAll(PDO::FETCH_ASSOC), 'team_ID');
+          
+          if (empty($teacherTeamIds)) {
+              echo json_encode([], JSON_UNESCAPED_UNICODE);
+              exit;
+          }
+          
+          // 獲取這些團隊中學生所屬的班級
+          $phTeam = implode(',', array_fill(0, count($teacherTeamIds), '?'));
+          $stmt = $conn->prepare("
+              SELECT DISTINCT c.c_ID, c.c_name
+              FROM classdata c
+              JOIN enrollmentdata e ON e.class_ID = c.c_ID
+              JOIN teammember tm ON tm.{$teamUserField} = e.enroll_u_ID
+              WHERE tm.team_ID IN ($phTeam)
+                AND e.enroll_status = 1
+              ORDER BY c.c_ID ASC
+          ");
+          $stmt->execute($teacherTeamIds);
+          echo json_encode($stmt->fetchAll(PDO::FETCH_ASSOC), JSON_UNESCAPED_UNICODE);
+      }
+      // 其他角色：返回空陣列
+      else {
+          echo json_encode([], JSON_UNESCAPED_UNICODE);
+      }
   } catch (Exception $e) {
       echo json_encode([], JSON_UNESCAPED_UNICODE);
   }
@@ -852,20 +914,70 @@ if (isset($_GET['cohort_list'])) {
   ob_clean(); // 🔥 清除之前所有 output（防止 BOM）
   header('Content-Type: application/json; charset=utf-8');
 
-  $stmt = $conn->prepare("
-      SELECT
-          cohort_ID,
-          cohort_name,
-          year_label
-      FROM cohortdata
-      WHERE cohort_status = 1  /* 如果你只想抓啟用的 */
-      ORDER BY cohort_ID ASC
-  ");
-  $stmt->execute();
-
-  $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-  echo json_encode($rows, JSON_UNESCAPED_UNICODE);
+  try {
+      $role_ID = $_SESSION['role_ID'] ?? null;
+      $u_ID = $_SESSION['u_ID'] ?? null;
+      
+      // 角色 1 或 2：顯示所有屆別
+      if (in_array($role_ID, [1, 2])) {
+          $stmt = $conn->prepare("
+              SELECT
+                  cohort_ID,
+                  cohort_name,
+                  year_label
+              FROM cohortdata
+              WHERE cohort_status = 1
+              ORDER BY cohort_ID ASC
+          ");
+          $stmt->execute();
+          $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+          echo json_encode($rows, JSON_UNESCAPED_UNICODE);
+      }
+      // 角色 3：只顯示自己班級的屆別
+      elseif ($role_ID == 3 && $u_ID) {
+          $stmt = $conn->prepare("
+              SELECT DISTINCT c.cohort_ID, c.cohort_name, c.year_label
+              FROM cohortdata c
+              JOIN enrollmentdata e ON e.cohort_ID = c.cohort_ID
+              WHERE e.enroll_u_ID = ? 
+                AND e.enroll_status = 1
+                AND c.cohort_status = 1
+              ORDER BY c.cohort_ID ASC
+          ");
+          $stmt->execute([$u_ID]);
+          $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+          echo json_encode($rows, JSON_UNESCAPED_UNICODE);
+      }
+      // 角色 4：顯示自己指導團隊所屬的屆別
+      elseif ($role_ID == 4 && $u_ID) {
+          // teammember 裡的 user 欄位名稱可能是 team_u_ID 或 u_ID
+          $colsTm = $conn->query("SHOW COLUMNS FROM teammember")->fetchAll(PDO::FETCH_COLUMN);
+          $teamUserField = in_array('team_u_ID', $colsTm) ? 'team_u_ID' : 'u_ID';
+          
+          $stmt = $conn->prepare("
+              SELECT DISTINCT c.cohort_ID, c.cohort_name, c.year_label
+              FROM cohortdata c
+              JOIN teamdata t ON t.cohort_ID = c.cohort_ID
+              JOIN teammember tm ON tm.team_ID = t.team_ID
+              JOIN userrolesdata ur ON ur.ur_u_ID = tm.{$teamUserField}
+              WHERE tm.{$teamUserField} = ?
+                AND ur.role_ID = 4
+                AND ur.user_role_status = 1
+                AND t.team_status = 1
+                AND c.cohort_status = 1
+              ORDER BY c.cohort_ID ASC
+          ");
+          $stmt->execute([$u_ID]);
+          $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+          echo json_encode($rows, JSON_UNESCAPED_UNICODE);
+      }
+      // 其他角色：返回空陣列
+      else {
+          echo json_encode([], JSON_UNESCAPED_UNICODE);
+      }
+  } catch (Exception $e) {
+      echo json_encode([], JSON_UNESCAPED_UNICODE);
+  }
   exit;
 }
 
@@ -890,45 +1002,176 @@ if (isset($_GET['team_list'])) {
     // teammember 裡的 user 欄位名稱可能是 team_u_ID 或 u_ID
     $colsTm = $conn->query("SHOW COLUMNS FROM teammember")->fetchAll(PDO::FETCH_COLUMN);
     $teamUserField = in_array('team_u_ID', $colsTm) ? 'team_u_ID' : 'u_ID';
-  
-    // ① 有選班級：透過 join 抓出至少有一名成員在該班級的團隊
-    if ($classIds) {
-  
-        $phCohort = implode(',', array_fill(0, count($cohortIds), '?'));
-        $phClass  = implode(',', array_fill(0, count($classIds), '?'));
-  
-        $sql = "
-            SELECT DISTINCT t.team_ID, t.team_project_name
-            FROM teamdata t
-            JOIN teammember tm ON tm.team_ID = t.team_ID
-            JOIN enrollmentdata e ON e.enroll_u_ID = tm.{$teamUserField}
-            WHERE t.team_status = 1
-              AND t.cohort_ID IN ($phCohort)
-              AND e.class_ID IN ($phClass)
-              AND e.enroll_status = 1
-            ORDER BY t.team_project_name ASC
-        ";
-  
-        $stmt = $conn->prepare($sql);
-        $stmt->execute(array_merge($cohortIds, $classIds));
-  
-        echo json_encode($stmt->fetchAll(PDO::FETCH_ASSOC), JSON_UNESCAPED_UNICODE);
-        exit;
+    
+    $role_ID = $_SESSION['role_ID'] ?? null;
+    $u_ID = $_SESSION['u_ID'] ?? null;
+    
+    try {
+        // 角色 1 或 2：顯示所有團隊
+        if (in_array($role_ID, [1, 2])) {
+            // ① 有選班級：透過 join 抓出至少有一名成員在該班級的團隊
+            if ($classIds) {
+                $phCohort = implode(',', array_fill(0, count($cohortIds), '?'));
+                $phClass  = implode(',', array_fill(0, count($classIds), '?'));
+        
+                $sql = "
+                    SELECT DISTINCT t.team_ID, t.team_project_name
+                    FROM teamdata t
+                    JOIN teammember tm ON tm.team_ID = t.team_ID
+                    JOIN enrollmentdata e ON e.enroll_u_ID = tm.{$teamUserField}
+                    WHERE t.team_status = 1
+                      AND t.cohort_ID IN ($phCohort)
+                      AND e.class_ID IN ($phClass)
+                      AND e.enroll_status = 1
+                    ORDER BY t.team_project_name ASC
+                ";
+        
+                $stmt = $conn->prepare($sql);
+                $stmt->execute(array_merge($cohortIds, $classIds));
+                echo json_encode($stmt->fetchAll(PDO::FETCH_ASSOC), JSON_UNESCAPED_UNICODE);
+            }
+            // ② 未選班級：只選屆別 → 直接取全部團隊
+            else {
+                $phCohort = implode(',', array_fill(0, count($cohortIds), '?'));
+                $sql = "
+                    SELECT team_ID, team_project_name
+                    FROM teamdata
+                    WHERE team_status = 1
+                      AND cohort_ID IN ($phCohort)
+                    ORDER BY team_project_name ASC
+                ";
+                $stmt = $conn->prepare($sql);
+                $stmt->execute($cohortIds);
+                echo json_encode($stmt->fetchAll(PDO::FETCH_ASSOC), JSON_UNESCAPED_UNICODE);
+            }
+        }
+        // 角色 3：只顯示自己班級的所有團隊
+        elseif ($role_ID == 3 && $u_ID) {
+            // 先獲取用戶的班級ID
+            $stmt = $conn->prepare("
+                SELECT DISTINCT class_ID, cohort_ID
+                FROM enrollmentdata
+                WHERE enroll_u_ID = ? AND enroll_status = 1
+            ");
+            $stmt->execute([$u_ID]);
+            $userClasses = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            
+            if (empty($userClasses)) {
+                echo json_encode([]);
+                exit;
+            }
+            
+            $userClassIds = array_filter(array_column($userClasses, 'class_ID'));
+            $userCohortIds = array_filter(array_column($userClasses, 'cohort_ID'));
+            
+            // 如果前端選擇的屆別不在用戶的屆別中，返回空
+            if (!empty($cohortIds)) {
+                $validCohorts = array_intersect($cohortIds, $userCohortIds);
+                if (empty($validCohorts)) {
+                    echo json_encode([]);
+                    exit;
+                }
+                $cohortIds = $validCohorts;
+            } else {
+                $cohortIds = $userCohortIds;
+            }
+            
+            // 如果前端選擇的班級不在用戶的班級中，返回空
+            if (!empty($classIds)) {
+                $validClasses = array_intersect($classIds, $userClassIds);
+                if (empty($validClasses)) {
+                    echo json_encode([]);
+                    exit;
+                }
+                $classIds = $validClasses;
+            } else {
+                $classIds = $userClassIds;
+            }
+            
+            $phCohort = implode(',', array_fill(0, count($cohortIds), '?'));
+            $phClass  = implode(',', array_fill(0, count($classIds), '?'));
+    
+            $sql = "
+                SELECT DISTINCT t.team_ID, t.team_project_name
+                FROM teamdata t
+                JOIN teammember tm ON tm.team_ID = t.team_ID
+                JOIN enrollmentdata e ON e.enroll_u_ID = tm.{$teamUserField}
+                WHERE t.team_status = 1
+                  AND t.cohort_ID IN ($phCohort)
+                  AND e.class_ID IN ($phClass)
+                  AND e.enroll_status = 1
+                ORDER BY t.team_project_name ASC
+            ";
+    
+            $stmt = $conn->prepare($sql);
+            $stmt->execute(array_merge($cohortIds, $classIds));
+            echo json_encode($stmt->fetchAll(PDO::FETCH_ASSOC), JSON_UNESCAPED_UNICODE);
+        }
+        // 角色 4：只顯示自己指導的團隊
+        elseif ($role_ID == 4 && $u_ID) {
+            // 獲取用戶指導的團隊ID列表
+            $stmt = $conn->prepare("
+                SELECT DISTINCT tm.team_ID
+                FROM teammember tm
+                JOIN userrolesdata ur ON ur.ur_u_ID = tm.{$teamUserField}
+                JOIN teamdata t ON t.team_ID = tm.team_ID
+                WHERE tm.{$teamUserField} = ?
+                  AND ur.role_ID = 4
+                  AND ur.user_role_status = 1
+                  AND t.team_status = 1
+            ");
+            $stmt->execute([$u_ID]);
+            $teacherTeamIds = array_column($stmt->fetchAll(PDO::FETCH_ASSOC), 'team_ID');
+            
+            if (empty($teacherTeamIds)) {
+                echo json_encode([]);
+                exit;
+            }
+            
+            // 過濾：只顯示符合前端選擇的屆別和班級的指導團隊
+            $phCohort = implode(',', array_fill(0, count($cohortIds), '?'));
+            $params = $cohortIds;
+            
+            $sql = "
+                SELECT DISTINCT t.team_ID, t.team_project_name
+                FROM teamdata t
+                WHERE t.team_status = 1
+                  AND t.cohort_ID IN ($phCohort)
+                  AND t.team_ID IN (" . implode(',', array_fill(0, count($teacherTeamIds), '?')) . ")
+            ";
+            $params = array_merge($params, $teacherTeamIds);
+            
+            // 如果有選擇班級，進一步過濾
+            if ($classIds) {
+                $phClass = implode(',', array_fill(0, count($classIds), '?'));
+                $sql = "
+                    SELECT DISTINCT t.team_ID, t.team_project_name
+                    FROM teamdata t
+                    JOIN teammember tm ON tm.team_ID = t.team_ID
+                    JOIN enrollmentdata e ON e.enroll_u_ID = tm.{$teamUserField}
+                    WHERE t.team_status = 1
+                      AND t.cohort_ID IN ($phCohort)
+                      AND e.class_ID IN ($phClass)
+                      AND e.enroll_status = 1
+                      AND t.team_ID IN (" . implode(',', array_fill(0, count($teacherTeamIds), '?')) . ")
+                    ORDER BY t.team_project_name ASC
+                ";
+                $params = array_merge($cohortIds, $classIds, $teacherTeamIds);
+            } else {
+                $sql .= " ORDER BY t.team_project_name ASC";
+            }
+            
+            $stmt = $conn->prepare($sql);
+            $stmt->execute($params);
+            echo json_encode($stmt->fetchAll(PDO::FETCH_ASSOC), JSON_UNESCAPED_UNICODE);
+        }
+        // 其他角色：返回空陣列
+        else {
+            echo json_encode([], JSON_UNESCAPED_UNICODE);
+        }
+    } catch (Exception $e) {
+        echo json_encode([], JSON_UNESCAPED_UNICODE);
     }
-  
-    // ② 未選班級：只選屆別 → 直接取全部團隊
-    $phCohort = implode(',', array_fill(0, count($cohortIds), '?'));
-    $sql = "
-        SELECT team_ID, team_project_name
-        FROM teamdata
-        WHERE team_status = 1
-          AND cohort_ID IN ($phCohort)
-        ORDER BY team_project_name ASC
-    ";
-    $stmt = $conn->prepare($sql);
-    $stmt->execute($cohortIds);
-  
-    echo json_encode($stmt->fetchAll(PDO::FETCH_ASSOC), JSON_UNESCAPED_UNICODE);
     exit;
   }
   
@@ -955,6 +1198,18 @@ try {
     $hasPeTargetId = false;
 }
 $hasPeMode = (bool)$periodModeColumn;
+
+// 獲取當前登入用戶ID，用於過濾只顯示該用戶創建的時段
+$currentUserId = $_SESSION['u_ID'] ?? null;
+
+// 構建 WHERE 條件：只顯示當前用戶創建的時段
+$whereConditions = [];
+$whereParams = [];
+if ($currentUserId) {
+    $whereConditions[] = "p.pe_created_u_ID = ?";
+    $whereParams[] = $currentUserId;
+}
+$whereClause = !empty($whereConditions) ? " WHERE " . implode(" AND ", $whereConditions) : "";
 
 if ($hasCohortId || $hasPeMode) {
     $selectedCols = ['p.*'];
@@ -986,7 +1241,7 @@ if ($hasCohortId || $hasPeMode) {
     if ($hasPeTargetId) {
         $sql .= " LEFT JOIN teamdata t ON CAST(p.pe_target_ID AS CHAR) = CAST(t.team_ID AS CHAR) AND p.pe_target_ID != 'ALL'";
     }
-    $sql .= " $orderBy";
+    $sql .= $whereClause . " $orderBy";
 } else {
     if ($hasPeTargetId) {
         $sql = "SELECT p.*, NULL as cohort_name, NULL as year_label,
@@ -998,12 +1253,14 @@ if ($hasCohortId || $hasPeMode) {
                 FROM perioddata p
                 LEFT JOIN teamdata t ON CAST(p.pe_target_ID AS CHAR) = CAST(t.team_ID AS CHAR) 
                     AND p.pe_target_ID != 'ALL'
+                $whereClause
                 $orderBy";
     } else {
         $sql = "SELECT p.*, NULL as cohort_name, NULL as year_label,
                        NULL as team_project_name,
                        " . ($hasPeMode && $periodModeColumn ? "p.{$periodModeColumn}" : "NULL") . " as period_mode_value
                 FROM perioddata p
+                $whereClause
                 $orderBy";
     }
 }
@@ -1013,10 +1270,14 @@ $per = 10; // 每頁顯示數量
 $page = max(1, (int)($_GET['page'] ?? 1));
 $offset = ($page - 1) * $per;
 
-// 先獲取總數（從 perioddata 表）
-$countSql = "SELECT COUNT(*) FROM perioddata p";
+// 先獲取總數（從 perioddata 表），也要加入用戶過濾條件
+$countSql = "SELECT COUNT(*) FROM perioddata p" . $whereClause;
 $countStmt = $conn->prepare($countSql);
-$countStmt->execute();
+if (!empty($whereParams)) {
+    $countStmt->execute($whereParams);
+} else {
+    $countStmt->execute();
+}
 $total = (int)$countStmt->fetchColumn();
 
 // 計算總頁數
@@ -1027,7 +1288,11 @@ $page = min($page, $pages); // 確保頁碼不超過總頁數
 $sql .= " LIMIT " . intval($per) . " OFFSET " . intval($offset);
 
 $stmt = $conn->prepare($sql);
-$stmt->execute();
+if (!empty($whereParams)) {
+    $stmt->execute($whereParams);
+} else {
+    $stmt->execute();
+}
 $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 /* 解析團隊資訊以供顯示 */
