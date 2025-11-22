@@ -984,19 +984,53 @@ function loadPeriodTable(page = 1) {
       .then(html => {
           const container = document.getElementById("periodTable");
           if (container) {
+            // 先提取分頁資訊（從 script 標籤中）
+            let paginationData = null;
+            // 使用更可靠的方法：找到包含 periodPaginationData 的 script 標籤
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = html;
+            const scripts = tempDiv.querySelectorAll('script');
+            for (const script of scripts) {
+              const content = script.textContent || script.innerHTML;
+              const match = content.match(/window\.periodPaginationData\s*=\s*({[\s\S]*?});/);
+              if (match) {
+                try {
+                  paginationData = JSON.parse(match[1]);
+                  break;
+                } catch (e) {
+                  console.warn('無法解析分頁資訊:', e);
+                }
+              }
+            }
+            
             container.innerHTML = html;
+            
+            // 手動執行所有插入的 <script> 標籤
+            const insertedScripts = container.querySelectorAll('script');
+            insertedScripts.forEach(oldScript => {
+              const newScript = document.createElement('script');
+              Array.from(oldScript.attributes).forEach(attr => {
+                newScript.setAttribute(attr.name, attr.value);
+              });
+              newScript.textContent = oldScript.textContent;
+              oldScript.parentNode.replaceChild(newScript, oldScript);
+            });
+            
+            // 處理頁碼
+            // 優先使用從 HTML 中提取的資訊，如果沒有則使用 window.periodPaginationData
+            // 使用 setTimeout 確保 DOM 已完全更新
+            setTimeout(() => {
+              const finalPaginationData = paginationData || window.periodPaginationData;
+              if (finalPaginationData && finalPaginationData.pages > 1) {
+                buildPeriodPager(finalPaginationData.page, finalPaginationData.pages);
+              } else {
+                // 沒有頁碼資訊或只有一頁，隱藏頁碼
+                const pagerBar = document.getElementById('periodPagerBar');
+                if (pagerBar) pagerBar.style.display = 'none';
+              }
+            }, 0);
           }
           updateReceiveFieldVisibility();
-          
-          // 處理頁碼
-          const paginationData = window.periodPaginationData;
-          if (paginationData) {
-            buildPeriodPager(paginationData.page, paginationData.pages);
-          } else {
-            // 沒有頁碼資訊，隱藏頁碼
-            const pagerBar = document.getElementById('periodPagerBar');
-            if (pagerBar) pagerBar.style.display = 'none';
-          }
       })
       .catch(err => {
           console.error('載入資料表失敗:', err);
@@ -1168,10 +1202,31 @@ function setupPeriodTableDelegation() {
 
 async function handlePeriodDelete(form) {
   if (!form) return;
-  const confirmed = typeof window.confirm === 'function'
-    ? window.confirm('確定刪除？')
-    : true;
+  
+  // 使用 SweetAlert2 彈跳視窗確認刪除
+  let confirmed = false;
+  if (window.Swal) {
+    const result = await Swal.fire({
+      title: '確認刪除',
+      text: '確定要刪除此評分時段嗎？此操作無法復原。',
+      icon: 'warning',
+      showCancelButton: true,
+      reverseButtons: true,
+      confirmButtonText: '確定刪除',
+      cancelButtonText: '取消',
+      confirmButtonColor: '#d33',
+      cancelButtonColor: '#3085d6'
+    });
+    confirmed = result.isConfirmed;
+  } else {
+    // 如果沒有 SweetAlert2，回退到原生 confirm
+    confirmed = typeof window.confirm === 'function'
+      ? window.confirm('確定刪除？')
+      : true;
+  }
+  
   if (!confirmed) return;
+  
   const actionUrl = form.getAttribute('action') || resolveCheckReviewPeriodsApiUrl();
   const formData = new FormData(form);
   formData.set('action', 'delete');
@@ -1191,11 +1246,30 @@ async function handlePeriodDelete(form) {
     if (!res.ok || (result && result.success === false)) {
       throw new Error(result?.msg || `刪除失敗 (HTTP ${res.status})`);
     }
+    
+    // 顯示刪除成功訊息
+    if (window.Swal) {
+      await Swal.fire({
+        icon: 'success',
+        title: '刪除成功',
+        text: '評分時段已成功刪除',
+        timer: 2000,
+        showConfirmButton: false
+      });
+    }
+    
     await loadPeriodTable();
   } catch (err) {
     console.error('刪除失敗:', err);
     if (window.Swal) {
-      Swal.fire('錯誤', err.message || '刪除失敗', 'error');
+      Swal.fire({
+        icon: 'error',
+        title: '刪除失敗',
+        text: err.message || '請稍後再試',
+        reverseButtons: true,
+        confirmButtonText: '確定',
+        confirmButtonColor: '#3085d6'
+      });
     } else {
       alert(err.message || '刪除失敗');
     }
