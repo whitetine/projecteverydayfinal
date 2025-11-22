@@ -40,6 +40,35 @@ function __initCheckReviewPeriods() {
     // 攔截表單提交，改用 AJAX
     form.addEventListener('submit', async function(e) {
       e.preventDefault();
+      
+      // 驗證開始時間和結束時間
+      const startInput = document.getElementById('period_start_d');
+      const endInput = document.getElementById('period_end_d');
+      if (startInput && endInput && startInput.value && endInput.value) {
+        const startTime = new Date(startInput.value);
+        const endTime = new Date(endInput.value);
+        if (isNaN(startTime.getTime()) || isNaN(endTime.getTime())) {
+          const errorMsg = '開始時間或結束時間格式錯誤';
+          if (window.Swal) {
+            Swal.fire('錯誤', errorMsg, 'error');
+          } else {
+            alert(errorMsg);
+          }
+          return;
+        }
+        if (endTime <= startTime) {
+          const errorMsg = '結束時間必須晚於開始時間';
+          if (window.Swal) {
+            Swal.fire('錯誤', errorMsg, 'error');
+          } else {
+            alert(errorMsg);
+          }
+          // 聚焦到結束時間輸入框
+          endInput.focus();
+          return;
+        }
+      }
+      
       const formData = new FormData(form);
       const action = formData.get('action');
       
@@ -390,15 +419,24 @@ function loadTeamList(cohortId, classId, preselectTeams) {
   teamPickerState.summaryMessage = '載入團隊中...';
   updateTeamSummaryDisplay();
   fetch(`${apiUrl}?${params.toString()}`)
-    .then(r => r.json())
+    .then(r => {
+      console.log('團隊列表請求 URL:', `${apiUrl}?${params.toString()}`);
+      console.log('團隊列表響應狀態:', r.status, r.statusText);
+      return r.json();
+    })
     .then(list => {
+      console.log('團隊列表原始數據:', list);
+      console.log('團隊列表是否為數組:', Array.isArray(list));
       teamPickerState.list = Array.isArray(list) ? list : [];
+      console.log('teamPickerState.list 長度:', teamPickerState.list.length);
       if (!teamPickerState.list.length) {
+        console.log('團隊列表為空，顯示「無符合條件的團隊」');
         teamPickerState.summaryMessage = '無符合條件的團隊';
         teamPickerState.receiveSummaryMessage = '無符合條件的團隊';
         setTeamSelections([], { role: 'assign', keepMessage: true });
         setTeamSelections([], { role: 'receive', keepMessage: true });
       } else {
+        console.log('找到', teamPickerState.list.length, '個團隊:', teamPickerState.list);
         const availableIds = new Set(teamPickerState.list.map(t => String(t.team_ID)));
 
         const resolveSelection = (current, pending, desired) => {
@@ -934,10 +972,14 @@ function updateReceiveFieldVisibility() {
 }
 
 /* 載入資料表 */
-function loadPeriodTable() {
+function loadPeriodTable(page = 1) {
   const apiUrl = resolveCheckReviewPeriodsApiUrl();
   const sort = new URLSearchParams(window.location.search).get("sort") || "created";
-  return fetch(`${apiUrl}?sort=${sort}`)
+  const params = new URLSearchParams({ sort });
+  if (page > 1) {
+    params.set('page', page);
+  }
+  return fetch(`${apiUrl}?${params.toString()}`)
       .then(r => r.text())
       .then(html => {
           const container = document.getElementById("periodTable");
@@ -945,12 +987,70 @@ function loadPeriodTable() {
             container.innerHTML = html;
           }
           updateReceiveFieldVisibility();
+          
+          // 處理頁碼
+          const paginationData = window.periodPaginationData;
+          if (paginationData) {
+            buildPeriodPager(paginationData.page, paginationData.pages);
+          } else {
+            // 沒有頁碼資訊，隱藏頁碼
+            const pagerBar = document.getElementById('periodPagerBar');
+            if (pagerBar) pagerBar.style.display = 'none';
+          }
       })
       .catch(err => {
           console.error('載入資料表失敗:', err);
           const tableEl = document.getElementById("periodTable");
           if (tableEl) tableEl.innerHTML = '<div class="alert alert-danger">資料載入失敗</div>';
       });
+}
+
+/* 建立頁碼 */
+function buildPeriodPager(page, pages) {
+  const pager = document.getElementById('periodPagerBar');
+  if (!pager) return;
+
+  if (!pages || pages <= 1) {
+    pager.innerHTML = '<span class="disabled">1</span>';
+    pager.style.display = 'none';
+    return;
+  }
+
+  pager.style.display = '';
+  let html = '';
+
+  if (page > 1) {
+    html += `<a href="#" data-page="${page - 1}">&laquo;</a>`;
+  } else {
+    html += '<span class="disabled">&laquo;</span>';
+  }
+
+  for (let i = 1; i <= pages; i++) {
+    if (i === page) {
+      html += `<span class="active">${i}</span>`;
+    } else {
+      html += `<a href="#" data-page="${i}">${i}</a>`;
+    }
+  }
+
+  if (page < pages) {
+    html += `<a href="#" data-page="${page + 1}">&raquo;</a>`;
+  } else {
+    html += '<span class="disabled">&raquo;</span>';
+  }
+
+  pager.innerHTML = html;
+
+  // 綁定點擊事件
+  pager.querySelectorAll('a[data-page]').forEach(a => {
+    a.addEventListener('click', e => {
+      e.preventDefault();
+      const p = parseInt(a.dataset.page, 10);
+      if (!isNaN(p)) {
+        loadPeriodTable(p);
+      }
+    });
+  });
 }
 
 /* 編輯 */

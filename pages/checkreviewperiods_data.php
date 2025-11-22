@@ -86,6 +86,21 @@ function tableExists(PDO $conn, $tableName) {
     return $cache[$tableName];
 }
 
+function columnExists(PDO $conn, $tableName, $columnName) {
+    static $cache = [];
+    $key = "{$tableName}.{$columnName}";
+    if (isset($cache[$key])) return $cache[$key];
+    try {
+        $quotedTable = $conn->quote($tableName);
+        $quotedColumn = $conn->quote($columnName);
+        $stmt = $conn->query("SHOW COLUMNS FROM {$quotedTable} LIKE {$quotedColumn}");
+        $cache[$key] = $stmt && $stmt->rowCount() > 0;
+    } catch (Exception $e) {
+        $cache[$key] = false;
+    }
+    return $cache[$key];
+}
+
 function teamTableColumns(PDO $conn) {
     static $columns = null;
     if ($columns !== null) return $columns;
@@ -812,60 +827,66 @@ if (isset($_GET['cohort_list'])) {
 /* 取得指定屆別的團隊 */
 if (isset($_GET['team_list'])) {
 
-  ob_clean();
-  header('Content-Type: application/json; charset=utf-8');
-
-  $cohortId = $_GET['cohort_id'] ?? null;
-
-  if (!$cohortId) {
-      echo json_encode([]);
-      exit;
+    if (ob_get_level()) ob_end_clean();
+    header('Content-Type: application/json; charset=utf-8');
+  
+    $cohortId = $_GET['cohort_id'] ?? '';
+    $classId  = $_GET['class_id'] ?? '';
+  
+    $cohortIds = array_filter(array_map('intval', explode(',', $cohortId)));
+    $classIds  = array_filter(array_map('intval', explode(',', $classId)));
+  
+    if (!$cohortIds) {
+        echo json_encode([]);
+        exit;
+    }
+  
+    // teammember 裡的 user 欄位名稱可能是 team_u_ID 或 u_ID
+    $colsTm = $conn->query("SHOW COLUMNS FROM teammember")->fetchAll(PDO::FETCH_COLUMN);
+    $teamUserField = in_array('team_u_ID', $colsTm) ? 'team_u_ID' : 'u_ID';
+  
+    // ① 有選班級：透過 join 抓出至少有一名成員在該班級的團隊
+    if ($classIds) {
+  
+        $phCohort = implode(',', array_fill(0, count($cohortIds), '?'));
+        $phClass  = implode(',', array_fill(0, count($classIds), '?'));
+  
+        $sql = "
+            SELECT DISTINCT t.team_ID, t.team_project_name
+            FROM teamdata t
+            JOIN teammember tm ON tm.team_ID = t.team_ID
+            JOIN enrollmentdata e ON e.enroll_u_ID = tm.{$teamUserField}
+            WHERE t.team_status = 1
+              AND t.cohort_ID IN ($phCohort)
+              AND e.class_ID IN ($phClass)
+              AND e.enroll_status = 1
+            ORDER BY t.team_project_name ASC
+        ";
+  
+        $stmt = $conn->prepare($sql);
+        $stmt->execute(array_merge($cohortIds, $classIds));
+  
+        echo json_encode($stmt->fetchAll(PDO::FETCH_ASSOC), JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+  
+    // ② 未選班級：只選屆別 → 直接取全部團隊
+    $phCohort = implode(',', array_fill(0, count($cohortIds), '?'));
+    $sql = "
+        SELECT team_ID, team_project_name
+        FROM teamdata
+        WHERE team_status = 1
+          AND cohort_ID IN ($phCohort)
+        ORDER BY team_project_name ASC
+    ";
+    $stmt = $conn->prepare($sql);
+    $stmt->execute($cohortIds);
+  
+    echo json_encode($stmt->fetchAll(PDO::FETCH_ASSOC), JSON_UNESCAPED_UNICODE);
+    exit;
   }
+  
 
-  $ids = array_filter(array_map('intval', explode(',', $cohortId)), function($v) {
-      return $v > 0;
-  });
-
-  if (empty($ids)) {
-      echo json_encode([]);
-      exit;
-  }
-
-  $classParam = $_GET['class_id'] ?? '';
-  $classIds = array_filter(array_map('intval', explode(',', $classParam)), function($v) {
-      return $v > 0;
-  });
-
-  $hasClassColumn = false;
-  try {
-      $colStmt = $conn->query("SHOW COLUMNS FROM teamdata LIKE 'class_ID'");
-      $hasClassColumn = $colStmt->rowCount() > 0;
-  } catch (Exception $e) {
-      $hasClassColumn = false;
-  }
-
-  $sql = "
-      SELECT team_ID, team_project_name
-      FROM teamdata
-      WHERE team_status = 1
-        AND cohort_ID IN (%s)
-  ";
-  $placeholders = implode(',', array_fill(0, count($ids), '?'));
-  $params = $ids;
-
-  if ($hasClassColumn && !empty($classIds)) {
-      $classPlaceholders = implode(',', array_fill(0, count($classIds), '?'));
-      $sql .= " AND class_ID IN ($classPlaceholders)";
-      $params = array_merge($params, $classIds);
-  }
-
-  $sql .= " ORDER BY team_project_name ASC";
-  $stmt = $conn->prepare(sprintf($sql, $placeholders));
-  $stmt->execute($params);
-
-  echo json_encode($stmt->fetchAll(PDO::FETCH_ASSOC), JSON_UNESCAPED_UNICODE);
-  exit;
-}
 
 
 /* 取得表格資料 */
@@ -937,6 +958,24 @@ if ($hasCohortId || $hasPeMode) {
                 $orderBy";
     }
 }
+
+// 分頁參數
+$per = 10; // 每頁顯示數量
+$page = max(1, (int)($_GET['page'] ?? 1));
+$offset = ($page - 1) * $per;
+
+// 先獲取總數（從 perioddata 表）
+$countSql = "SELECT COUNT(*) FROM perioddata p";
+$countStmt = $conn->prepare($countSql);
+$countStmt->execute();
+$total = (int)$countStmt->fetchColumn();
+
+// 計算總頁數
+$pages = max(1, (int)ceil($total / $per));
+$page = min($page, $pages); // 確保頁碼不超過總頁數
+
+// 添加分頁限制
+$sql .= " LIMIT " . intval($per) . " OFFSET " . intval($offset);
 
 $stmt = $conn->prepare($sql);
 $stmt->execute();
@@ -1122,3 +1161,26 @@ foreach ($tmp as $r) $rankByCreated[$r['period_ID']] = $i++;
 <?php endforeach; ?>
   </tbody>
 </table>
+<div class="pager-bar" id="periodPagerBar" style="display: none;">
+  <span class="disabled">1</span>
+</div>
+<?php
+// 頁碼資訊（傳遞給前端使用）
+$paginationData = [
+    'page' => $page,
+    'pages' => $pages,
+    'total' => $total,
+    'per' => $per
+];
+?>
+<script>
+  (function() {
+    window.periodPaginationData = <?= json_encode($paginationData, JSON_UNESCAPED_UNICODE) ?>;
+    // 當表格載入完成後，初始化頁碼（延遲執行確保 DOM 已更新）
+    setTimeout(function() {
+      if (typeof buildPeriodPager === 'function' && window.periodPaginationData) {
+        buildPeriodPager(window.periodPaginationData.page, window.periodPaginationData.pages);
+      }
+    }, 10);
+  })();
+</script>
